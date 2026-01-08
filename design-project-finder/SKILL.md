@@ -227,16 +227,27 @@ def generate_email_prompt(project: Dict, tone: str) -> str:
 ```
 
 ### 步骤7: 生成输出
-创建以下文件:
+创建按日期组织的文件夹结构:
 
-1. `output/design_projects_YYYY-MM-DD.csv` - 完整项目数据
-2. `output/contact_list.csv` - 纯联系方式列表
-3. `output/design_projects_summary.md` - 统计分析报告
-4. `output/marketing_emails/` - 个性化邮件文件夹
-   - `high_priority/` - A/B级项目邮件
-   - `medium_priority/` - C级项目邮件（可选）
-5. `output/README.md` - 使用说明
-6. `.gitignore` - Git配置
+```
+output/
+├── latest/ → 指向最新日期文件夹的软链接
+├── YYYY-MM-DD/ (如 2026-01-08)
+│   ├── design_projects_YYYY-MM-DD.csv  - 完整项目数据
+│   ├── contact_list_YYYY-MM-DD.csv     - 纯联系方式列表
+│   ├── design_projects_summary_YYYY-MM-DD.md - 统计分析报告
+│   ├── README.md                       - 使用说明
+│   └── marketing_emails/               - 个性化邮件文件夹
+│       ├── high_priority/              - A/B级项目邮件
+│       └── medium_priority/            - C级项目邮件
+└── archive/                            - 归档旧数据（手动管理）
+```
+
+**说明**:
+- 每次运行创建新的日期文件夹
+- `output/latest` 自动更新指向最新日期文件夹
+- 保留历史数据，便于对比不同日期的收集结果
+- 支持每日运行，长期积累项目数据库
 
 ### 步骤7.5: 邮件内容验证 ⭐ **关键步骤**
 在生成输出后，**必须验证**所有营销邮件中的占位符已被正确替换:

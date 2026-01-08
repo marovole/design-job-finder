@@ -8,8 +8,19 @@ import re
 import os
 from pathlib import Path
 
-# 默认邮件目录
-EMAIL_DIR = Path("output/marketing_emails")
+# 默认邮件目录 - 支持新旧结构
+# 优先检查 output/latest/marketing_emails（新结构）
+# 降级检查 output/marketing_emails（旧结构）
+DEFAULT_EMAIL_DIR = Path("output/latest/marketing_emails")
+FALLBACK_EMAIL_DIR = Path("output/marketing_emails")
+
+def find_email_dir():
+    """自动查找邮件目录（支持新旧结构）"""
+    if DEFAULT_EMAIL_DIR.exists():
+        return DEFAULT_EMAIL_DIR
+    elif FALLBACK_EMAIL_DIR.exists():
+        return FALLBACK_EMAIL_DIR
+    return None
 
 def verify_emails(email_dir=None):
     """
@@ -19,7 +30,13 @@ def verify_emails(email_dir=None):
         bool: True 表示所有邮件都正确, False 表示存在问题
     """
     if email_dir is None:
-        email_dir = EMAIL_DIR
+        # 自动查找邮件目录
+        email_dir = find_email_dir()
+        if email_dir is None:
+            print(f"❌ 未找到邮件目录")
+            print("   尝试查找: output/latest/marketing_emails/ (新结构)")
+            print("   或: output/marketing_emails/ (旧结构)")
+            return False
     else:
         email_dir = Path(email_dir)
 
@@ -98,11 +115,16 @@ def verify_with_grep():
     """使用 grep 命令快速验证（备用方法）"""
     print("\n🔍 使用 grep 快速验证...")
 
+    # 支持新旧结构
+    email_dir = find_email_dir()
+    if email_dir is None:
+        email_dir = Path("output/marketing_emails")
+
     patterns = ['{industry}', '{title}', '{client}', '{budget}']
     found_issues = False
 
     for pattern in patterns:
-        result = os.popen(f'grep -r "{pattern}" output/marketing_emails/ 2>/dev/null').read()
+        result = os.popen(f'grep -r "{pattern}" "{email_dir}/" 2>/dev/null').read()
         if result.strip():
             found_issues = True
             print(f"  ❌ 发现: {pattern}")
