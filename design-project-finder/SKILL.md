@@ -63,35 +63,33 @@ instructions = f"""
 5. 发布时间/更新时间
 6. 项目状态 (开放中/招标中/紧急)
 
+**工作范围 (核心字段 - 必须提取)**:
+7. 需要做的工作 (What): 具体要设计什么? (如: 移动应用UI重新设计、品牌标识设计、网站前端设计等)
+8. 交付物 (Deliverables): 需要交付什么成果? (如: Figma高保真原型、Logo源文件、设计系统文档等)
+9. 交付格式 (Format): 需要以什么格式交付? (如: Figma、Sketch、PDF、HTML/CSS、可交互原型等)
+10. 交付时间 (Timeline): 项目时间要求? (如: 4周内、紧急、2周内等)
+
 **联系信息** (尽可能提取):
-7. 客户邮箱地址
-8. 客户LinkedIn链接
-9. 公司网站
-10. 平台项目链接
+11. 客户邮箱地址
+12. 客户LinkedIn链接
+13. 公司网站
+14. 平台项目链接
 
 **客户背景**:
-11. 客户行业/领域
-12. 客户类型 (初创/中小企业/大企业/个人)
-13. 以往发布项目数量
-14. 客户评价/信誉分数
+15. 客户行业/领域
+16. 客户类型 (初创/中小企业/大企业/个人)
+17. 以往发布项目数量
+18. 客户评价/信誉分数
 
 **优先级**:
-- 高: 预算>$1000 且有联系方式 且状态紧急
+- 高: 预算>$1000 且有联系方式 且工作范围明确
 - 中: 预算>$500 或有部分联系方式
 - 低: 其他
 
-CRITICAL: Please extract contact information with highest priority:
-1. Direct email address (check project description, About page, Contact page)
-2. LinkedIn profile URL (personal or company page)
-3. Company website domain
-4. Platform messaging link
+CRITICAL: 务必详细提取"工作范围"信息 - 这是评估项目价值和定制营销邮件的关键!
+如果原始描述中没有明确说明工作范围、交付物、格式或时间，请基于项目标题和描述合理推断，并标注"[推断]"。
 
-If email is not directly visible, look for:
-- Company domain → construct likely emails (e.g., contact@domain.com, hello@domain.com, info@domain.com)
-- LinkedIn profile → extract from bio or company page
-- Social media profiles that might contain contact info
-
-请至少找到 15-20 个活跃项目,重点关注有客户联系方式的。
+请至少找到 15-20 个活跃项目,重点关注有客户联系方式且工作范围明确的。
 """
 
 model = "exa-research-pro"
@@ -348,6 +346,12 @@ gh pr create --title "Design Project Collection - {date}" --body "..."
     "设计类型标签": "UI/UX",
     "项目状态": "紧急",
 
+    # 工作范围 (新增 - 核心字段)
+    "需要做的工作": "重新设计SaaS仪表板界面，包括用户流程优化、高保真原型和可交互演示",
+    "交付物": "Figma设计文件、交互原型( InVision)、设计系统文档、源文件",
+    "交付格式": "Figma、InVision可交互原型、PDF文档",
+    "交付时间": "4周内完成初稿，2轮迭代",
+
     # 预算
     "项目预算范围": "$2,000 - $3,500",
     "预算下限USD": 2000,
@@ -393,6 +397,7 @@ gh pr create --title "Design Project Collection - {date}" --body "..."
 **主要列**:
 - 优先级标签、优先级分数、数据来源
 - 项目标题、详细要求、设计类型标签、项目状态
+- **需要做的工作、交付物、交付格式、交付时间** (新增)
 - 预算范围、预算下限/上限/中值（USD）
 - 客户名称、类型、行业、信誉分数
 - 邮箱地址、邮箱有效性、LinkedIn链接、公司网站、项目链接

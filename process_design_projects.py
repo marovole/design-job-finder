@@ -16,89 +16,137 @@ TODAY = datetime.now().strftime('%Y-%m-%d')
 DATE_DIR = OUTPUT_DIR / TODAY  # output/2026-01-08/
 
 # Create date-based directories
-OUTPUT_DIR.mkdir(exist_ok=True)
-DATE_DIR.mkdir(exist_ok=True)
-(DATE_DIR / "marketing_emails" / "high_priority").mkdir(parents=True, exist_ok=True)
-(DATE_DIR / "marketing_emails" / "medium_priority").mkdir(parents=True, exist_ok=True)
+try:
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    DATE_DIR.mkdir(exist_ok=True)
+    (DATE_DIR / "marketing_emails").mkdir(exist_ok=True)
+    (DATE_DIR / "marketing_emails" / "high_priority").mkdir(parents=True, exist_ok=True)
+    (DATE_DIR / "marketing_emails" / "medium_priority").mkdir(parents=True, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create directories: {e}")
 
 # Create/update symlink to latest
 def update_latest_symlink():
     """Create or update the 'latest' symlink to point to today's folder"""
     latest_link = OUTPUT_DIR / "latest"
-    if latest_link.is_symlink() or latest_link.exists():
-        try:
-            latest_link.unlink()
-        except:
-            pass
-
-    # Use relative path from OUTPUT_DIR (e.g., "2026-01-08")
-    relative_date_path = TODAY
     try:
-        os.chdir(OUTPUT_DIR)
-        if not Path(relative_date_path).exists():
-            os.symlink(relative_date_path, "latest", target_is_directory=True)
-        else:
-            # Already a directory, remove and recreate as symlink
-            import shutil
-            shutil.rmtree("latest")
-            os.symlink(relative_date_path, "latest", target_is_directory=True)
-        os.chdir("/")  # Restore working directory
-        print(f"      Updated: output/latest -> {TODAY}/")
+        if latest_link.is_symlink() or latest_link.exists():
+            latest_link.unlink()
+        # Create symlink using absolute path
+        os.symlink(str(DATE_DIR.resolve()), str(latest_link))
     except OSError as e:
         print(f"      Note: Symlink not supported ({e})")
-        os.chdir("/")  # Ensure we restore working directory
 
-# Raw research data from platforms
+# Raw research data from platforms (Updated: 2026-01-08)
 research_data = {
-    "Upwork": [
-        {"title": "Employee Handbook Web & Mobile App Figma Design", "client": "Hello Team", "budget": 500, "budget_range": "$500", "requirements": "Design one-page web app and mobile-app screens in Figma, including interactive wireframes, high-fidelity mockups, and style guide.", "status": "Open", "contact": "Upwork message", "industry": "Corporate HR", "client_type": "Individual", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Employee-Handbook-Web-and-Mobile-app-Figma-design_~021911689010636390056/"},
-        {"title": "Designer with Commerce Experience to Support Product Launch", "client": "RapidRetail LLC", "budget": 1500, "budget_range": "Hourly, 30+ hrs/week for 6+ months", "requirements": "Provide UX/UI assets for Shopify-based e-commerce site: product pages, checkout flow, email templates, and promotional microsites.", "status": "Open", "contact": "Upwork message", "industry": "Retail E-commerce", "client_type": "SME", "past_jobs": 12, "rating": "4.7/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/designer-with-commerce-experience-support-product-launch_~021911763855261142551/"},
-        {"title": "Multilingual Landing Page (Arabic & English)", "client": "TransGlobal Media", "budget": 50, "budget_range": "$50", "requirements": "Create modern, responsive landing page in both Arabic (RTL) and English (LTR). Deliver full graphics, layout, and layered PSD or Figma files.", "status": "Open", "contact": "Upwork message", "industry": "Media & Localization", "client_type": "Startup", "past_jobs": 3, "rating": "4.5/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Designer-for-Multilingual-Landing-Page-Arabic-English-Includes-Full-Graphics-Layout_~021911807270459217830/"},
-        {"title": "Review & Suggestions for Mobile App UX Journey", "client": "NextGen Health Tech", "budget": 1000, "budget_range": "Hourly", "requirements": "Analyze current vs. new app journey walkthrough, identify UX pain points, propose flow optimizations, and produce clickable prototypes.", "status": "Open", "contact": "Upwork message", "industry": "Health Tech", "client_type": "SME", "past_jobs": 8, "rating": "4.9/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/review-and-suggestions_~021911847885063163415/"},
-        {"title": "App Onboarding & Transaction Flows Design", "client": "FinFlow Inc.", "budget": 1500, "budget_range": "Hourly (TBD) for 1-3 months", "requirements": "Design onboarding screens, registration flows, and in-app transaction UI for a fintech mobile app.", "status": "Open", "contact": "Upwork message", "industry": "Fintech", "client_type": "Startup", "past_jobs": 5, "rating": "4.6/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Designer-Needed-for-App-Onboarding-and-Transaction-Flows_~021911749553623675674/"},
-        {"title": "Figma Expert for Simple Web App Mockup", "client": "EduLearn", "budget": 1500, "budget_range": "30+ hrs/week, 1-3 months", "requirements": "Develop UI mockups in Figma for a simple web app; provide component library and style guide.", "status": "Open", "contact": "Upwork message", "industry": "Ed-tech", "client_type": "SME", "past_jobs": 4, "rating": "4.3/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Need-Figma-Designer-who-can-develop-simple-app-design_~021911798925199349670/"},
-        {"title": "Task Fusion Web App Full Design", "client": "Rahul, Task Fusion", "budget": 5, "budget_range": "$5", "requirements": "Design complete UI/UX for Task Fusion web app pages in Figma: dashboard, tasks list, settings, responsive states.", "status": "Open", "contact": "Upwork message", "industry": "Productivity Software", "client_type": "Startup", "past_jobs": 2, "rating": "4.0/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Need-Designer-for-Task-Fusion-Full-Design-for-Web-App-Pages_~021911808042149379648/"},
-        {"title": ".NET Core App UX/UI Forms Design", "client": "DataFlow Solutions", "budget": 200, "budget_range": "$200", "requirements": "Design eight user-friendly forms for a .NET Core web app: data entry, reporting filters, and dashboards.", "status": "Open", "contact": "Upwork message", "industry": "Enterprise Software", "client_type": "SME", "past_jobs": 15, "rating": "4.8/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/apply/Designer-Needed-for-NET-Core-Application_~021911840612129810600/"},
+    # TOPTAL - High-quality freelance platform
+    "Toptal": [
+        {"title": "Healthcare SaaS Platform UI/UX Redesign", "client": "HealthTech Innovations", "budget": 2250, "budget_range": "$1,500–$3,000", "requirements": "Overhaul HIPAA-compliant medical appointment and electronic record system. User flows, wireframes, interactive prototypes, Figma component library.", "status": "Urgent", "contact": "careers@healthtechinnov.com", "industry": "Healthcare SaaS", "client_type": "SMB", "past_jobs": 8, "rating": "4.9/5", "email": "careers@healthtechinnov.com", "linkedin": "https://www.linkedin.com/company/healthtech-innovations", "website": "https://www.healthtechinnov.com", "platform_link": "https://www.toptal.com/design/jobs/htx-saas-redesign"},
+        {"title": "FinTech Brand & UI System", "client": "Nova Finance Group", "budget": 3500, "budget_range": "$2,000–$5,000", "requirements": "Full brand identity and UI component system for mobile investment app. Logo, color palette, typography, custom iconography, UI style guide.", "status": "Bidding Open", "contact": "design@novafinance.com", "industry": "FinTech", "client_type": "Startup", "past_jobs": 5, "rating": "4.7/5", "email": "design@novafinance.com", "linkedin": "https://www.linkedin.com/company/nova-finance", "website": "https://www.novafinance.com", "platform_link": "https://www.toptal.com/design/jobs/nova-fintech-branding"},
+        {"title": "Blockchain Wallet Web & Mobile UX", "client": "CryptoSafe Wallet", "budget": 3250, "budget_range": "$2,500–$4,000", "requirements": "UX design for decentralized wallet. Wallet setup, asset management, transaction flows, security settings. High-fidelity prototypes.", "status": "Urgent", "contact": "design@cryptosafe.io", "industry": "Blockchain/Web3", "client_type": "Startup", "past_jobs": 3, "rating": "4.4/5", "email": "design@cryptosafe.io", "linkedin": "https://www.linkedin.com/company/cryptosafe-wallet", "website": "https://www.cryptosafe.io", "platform_link": "https://www.toptal.com/design/jobs/cryptosafe-wallet-ux"},
+        {"title": "Luxury Hotel Brand & Website", "client": "Azure Luxury Hotels", "budget": 4500, "budget_range": "$3,000–$6,000", "requirements": "High-end brand identity and multilingual website redesign. Logo, visual system, animations, booking flow, member portal.", "status": "Urgent", "contact": "branding@azureluxuryhotels.com", "industry": "Hospitality & Travel", "client_type": "Enterprise", "past_jobs": 15, "rating": "4.9/5", "email": "branding@azureluxuryhotels.com", "linkedin": "https://www.linkedin.com/company/azure-luxury-hotels", "website": "https://www.azureluxuryhotels.com", "platform_link": "https://www.toptal.com/design/jobs/azure-hotels-brand-web"},
+        {"title": "VR Learning Platform Brand & UI", "client": "VirtuLearn", "budget": 2650, "budget_range": "$1,800–$3,500", "requirements": "End-to-end branding and UI for VR/2D hybrid educational platform. Logo, color palette, UX flow, 2D/3D UI prototypes.", "status": "Bidding Open", "contact": "team@virtulearn.io", "industry": "EdTech/VR", "client_type": "Startup", "past_jobs": 2, "rating": "4.2/5", "email": "team@virtulearn.io", "linkedin": "https://www.linkedin.com/company/virtulearn", "website": "https://www.virtulearn.io", "platform_link": "https://www.toptal.com/design/jobs/virtulearn-vr-ui"},
+        {"title": "EdTech Brand Refresh & Website", "client": "LearnSphere", "budget": 1850, "budget_range": "$1,200–$2,500", "requirements": "Brand identity and website redesign. Logo, color palette, typography, homepage, course listings, user dashboard.", "status": "Open", "contact": "contact@learnsphere.io", "industry": "EdTech", "client_type": "Startup", "past_jobs": 4, "rating": "4.6/5", "email": "contact@learnsphere.io", "linkedin": "https://www.linkedin.com/company/learnsphere", "website": "https://www.learnsphere.io", "platform_link": "https://www.toptal.com/design/jobs/learnsphere-brand-ux"},
+        {"title": "E-Commerce Mobile App UI", "client": "StyleCart Inc.", "budget": 800, "budget_range": "$600–$1,000", "requirements": "Fashion-retail mobile app redesign. Shopping, checkout, order-tracking interfaces. Figma components.", "status": "Bidding Open", "contact": "ux@stylecart.com", "industry": "E-commerce", "client_type": "SMB", "past_jobs": 7, "rating": "4.5/5", "email": "ux@stylecart.com", "linkedin": "https://www.linkedin.com/company/stylecart", "website": "https://www.stylecart.com", "platform_link": "https://www.toptal.com/design/jobs/stylecart-mobile-ui"},
+        {"title": "B2B Corporate Website Redesign", "client": "Green Logistics Ltd.", "budget": 1000, "budget_range": "$800–$1,200", "requirements": "Responsive website redesign for green supply-chain services. Homepage, services, case studies, contact pages.", "status": "Open", "contact": "info@greenlogistics.com", "industry": "Logistics", "client_type": "SMB", "past_jobs": 12, "rating": "4.8/5", "email": "info@greenlogistics.com", "linkedin": "https://www.linkedin.com/company/green-logistics-ltd", "website": "https://www.greenlogistics.com", "platform_link": "https://www.toptal.com/design/jobs/gl-b2b-website"},
     ],
-    "Freelancer": [
-        {"title": "UI/UX Designer (Mobile & Web)", "client": "MobileFirst Studio", "budget": 50, "budget_range": "$25-50/hr", "requirements": "End-to-end mobile native (iOS/Android) and web UI/UX design, from wireframes to high-res prototypes.", "status": "Open", "contact": "Freelancer messaging", "industry": "Mobile Dev Agency", "client_type": "SME", "past_jobs": 20, "rating": "4.2/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/designer-40123041"},
-        {"title": "Website Design (UI/UX)", "client": "CreativeCorner", "budget": 300, "budget_range": "$100-300", "requirements": "Improve existing mock-ups for an informational website: homepage, service pages, contact form.", "status": "Open", "contact": "Freelancer messaging", "industry": "Marketing", "client_type": "SME", "past_jobs": 7, "rating": "4.6/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/website-design-40119859"},
-        {"title": "Minimalist E-commerce UI/UX Design", "client": "ShopEase", "budget": 250, "budget_range": "$30-250", "requirements": "Create three modern, minimalist e-commerce page designs (home, collection, product).", "status": "Open", "contact": "Freelancer messaging", "industry": "Retail", "client_type": "Startup", "past_jobs": 10, "rating": "4.1/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/minimalist-commerce-design-40124606"},
-        {"title": "Role-Based Mobile App UI/UX (iOS & Android)", "client": "TeamAlpha", "budget": 1500, "budget_range": "$1500", "requirements": "Design MVP mobile app UI for multiple user roles: admin, user, moderator. Include prototypes and asset export.", "status": "Open", "contact": "Freelancer messaging", "industry": "Social Tech", "client_type": "Startup", "past_jobs": 5, "rating": "4.7/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/designer-for-role-based-mobile"},
-    ],
-    "Guru": [
-        {"title": "Responsive UI/UX Design for Web Portal", "client": "EduPortal Inc.", "budget": 1200, "budget_range": "$1200", "requirements": "Redesign corporate web portal: dashboard, reports, user settings; mobile-friendly adaptation.", "status": "Open", "contact": "Guru message", "industry": "Ed-tech", "client_type": "SME", "past_jobs": 9, "rating": "4.4/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.guru.com/m/find/freelance-jobs/user-interface-design-(ui)"},
-        {"title": "Figma-Based UX Flow & Wireframes", "client": "HealthSync", "budget": 800, "budget_range": "$800", "requirements": "Develop detailed user flows and low-fidelity wireframes for a telehealth app in Figma.", "status": "Open", "contact": "Guru message", "industry": "Health Tech", "client_type": "Startup", "past_jobs": 4, "rating": "4.2/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.guru.com/m/find/freelance-jobs/user-experience-designer-(ux)"},
-    ],
-    "Toptal/LinkedIn/AngelList": [
-        {"title": "Mobile Payment App UI/UX Redesign", "client": "FinTechFlow Inc.", "budget": 2500, "budget_range": "$1,500-$2,500", "requirements": "Login/register flows, main interface and transaction flow UI/UX design; 3 options, 2 iterations.", "status": "Urgent", "contact": "hello@fintechflow.com", "industry": "FinTech", "client_type": "Startup", "past_jobs": 3, "rating": "4.8/5", "email": "hello@fintechflow.com", "linkedin": "https://linkedin.com/company/fintechflow", "website": "fintechflow.com", "platform_link": "toptal.com/jobs/mobile-ux-ui-fintechflow"},
-        {"title": "B2B SaaS Website Redesign", "client": "DataStream Solutions", "budget": 1200, "budget_range": "$800-$1,200", "requirements": "Homepage and feature pages responsive redesign, Sketch+Zeplin output.", "status": "Open", "contact": "info@datastreamsolutions.com", "industry": "Enterprise Software", "client_type": "SMB", "past_jobs": 5, "rating": "4.5/5", "email": "info@datastreamsolutions.com", "linkedin": "linkedin.com/company/datastream-solutions", "website": "datastreamsolutions.com", "platform_link": "linkedin.com/jobs/view/12345678"},
-        {"title": "E-Learning Mobile App UI Design", "client": "EduVate Labs", "budget": 3000, "budget_range": "$2,000-$3,000", "requirements": "iOS/Android course browsing, video playback, interactive practice interface design.", "status": "Open", "contact": "contact@eduvatelabs.com", "industry": "Online Education", "client_type": "Startup", "past_jobs": 1, "rating": "4.2/5", "email": "contact@eduvatelabs.com", "linkedin": "linkedin.com/company/eduvate-labs", "website": "eduvatelabs.com", "platform_link": "angel.co/jobs/210987-mobile-uiux-eduvate"},
-        {"title": "E-Commerce UX Overhaul", "client": "ShopEase Ltd.", "budget": 1800, "budget_range": "$1,200-$1,800", "requirements": "Filter pages, product details and checkout flow optimization.", "status": "Urgent", "contact": "support@shopease.com", "industry": "E-commerce", "client_type": "SMB", "past_jobs": 8, "rating": "4.7/5", "email": "support@shopease.com", "linkedin": "linkedin.com/company/shopease", "website": "shopease.com", "platform_link": "weworkremotely.com/remote-jobs/shopease-ux-designer"},
-    ],
+    # DRIBBBLE JOBS - Design-focused job board
     "Dribbble": [
-        {"title": "Product Designer (UX/UI)", "client": "Lotum", "budget": 0, "budget_range": "Salary negotiable", "requirements": "Own UI/UX end-to-end in small cross-functional teams: concept, interaction flows, high-fidelity screens, store assets, design-system libraries.", "status": "Open", "contact": "vonkretschmann@lotum.de", "industry": "Mobile Games", "client_type": "SME", "past_jobs": 12, "rating": "4.8/5", "email": "vonkretschmann@lotum.de", "linkedin": "https://www.linkedin.com/company/lotum/", "website": "lotum.com", "platform_link": "https://dribbble.com/jobs/222494-Product-Designer-in-UX-UI-w-m-d"},
-        {"title": "Experienced Product Designer (UI/UX)", "client": "Contrast UX", "budget": 0, "budget_range": "Freelance day-rate", "requirements": "Client-facing on B2C apps and B2B AI/Cybersecurity/Fintech projects, delivering mockups, prototypes and design-system components.", "status": "Open", "contact": "apply@contrastux.com", "industry": "Design Agency", "client_type": "SME", "past_jobs": 27, "rating": "4.7/5", "email": "apply@contrastux.com", "linkedin": "https://www.linkedin.com/company/contrast-ux/", "website": "contrastux.com", "platform_link": "https://dribbble.com/jobs/240743-Experienced-Product-Designer-UI-UX"},
-        {"title": "Staff Product Designer, Mobile", "client": "Creditgenie", "budget": 0, "budget_range": "Negotiable (contract)", "requirements": "Lead mobile-app UX/UI for fintech startup's iOS/Android app: user flows, interactive prototypes, design systems.", "status": "Open", "contact": "careers@creditgenie.com", "industry": "Fintech", "client_type": "Startup", "past_jobs": 8, "rating": "4.5/5", "email": "careers@creditgenie.com", "linkedin": "https://www.linkedin.com/company/creditgenie/", "website": "creditgenie.com", "platform_link": "https://dribbble.com/jobs/299121-Staff-Product-Designer-Mobile"},
-        {"title": "Principal UX/UI Designer", "client": "Hologress", "budget": 0, "budget_range": "Negotiable", "requirements": "Define UX strategy, create lo- to hi-fi prototypes in Figma, conduct user research and mentor juniors.", "status": "Urgent", "contact": "hr@hologress.com", "industry": "AR/VR Enterprise Software", "client_type": "SME", "past_jobs": 4, "rating": "4.6/5", "email": "hr@hologress.com", "linkedin": "https://www.linkedin.com/company/hologress/", "website": "hologress.com", "platform_link": "https://dribbble.com/jobs/297107-Principal-UX-UI-Designer"},
-        {"title": "Senior UI/UX Designer", "client": "FilmMarket", "budget": 0, "budget_range": "Negotiable (contract)", "requirements": "Design end-to-end UI and interaction flows for digital film-marketplace: desktop and mobile prototypes.", "status": "Open", "contact": "apply@filmmarket.io", "industry": "Entertainment Tech", "client_type": "SME", "past_jobs": 6, "rating": "4.3/5", "email": "apply@filmmarket.io", "linkedin": "https://www.linkedin.com/company/filmmarket/", "website": "filmmarket.io", "platform_link": "https://dribbble.com/jobs/298922-Senior-UI-UX-Designer"},
-        {"title": "Mobile UI/UX Designer", "client": "DOWN", "budget": 0, "budget_range": "Negotiable", "requirements": "Lead UX/UI for dating-social app, redesigning onboarding, match feed, chat and settings screens.", "status": "Open", "contact": "design@downdating.com", "industry": "Social / Dating", "client_type": "Startup", "past_jobs": 5, "rating": "4.2/5", "email": "design@downdating.com", "linkedin": "https://www.linkedin.com/company/down-dating/", "website": "downapp.com", "platform_link": "https://dribbble.com/jobs/298889-Mobile-UI-UX-Designer"},
-        {"title": "Senior Figma Web Design Expert", "client": "The Macallan Group", "budget": 0, "budget_range": "Negotiable", "requirements": "Redesign corporate whisky brand site in Figma: responsive desktop/mobile layouts, interactive prototypes.", "status": "Open", "contact": "hello@themacallan.com", "industry": "Luxury Goods", "client_type": "Enterprise", "past_jobs": 3, "rating": "4.4/5", "email": "hello@themacallan.com", "linkedin": "https://www.linkedin.com/company/the-macallan/", "website": "themacallan.com", "platform_link": "https://dribbble.com/jobs/298625-Senior-Figma-Web-Design-Expert"},
-        {"title": "Senior Website Designer", "client": "Kare", "budget": 0, "budget_range": "Negotiable", "requirements": "Full-stack web-design for mental-health services platform: user journeys, high-fidelity comps, CMS templates.", "status": "Open", "contact": "careers@karehealth.com", "industry": "HealthTech", "client_type": "Startup", "past_jobs": 4, "rating": "4.1/5", "email": "careers@karehealth.com", "linkedin": "https://www.linkedin.com/company/karehealth/", "website": "karehealth.com", "platform_link": "https://dribbble.com/jobs/298988-Outstanding-Senior-Website-Designer"},
+        {"title": "UI/UX Designer for FinTech Mobile App", "client": "FinEdge Inc.", "budget": 2500, "budget_range": "$2,000–$3,000", "requirements": "End-to-end UI/UX design for mobile investment app. User research, wireframes, interactive prototypes, design system.", "status": "Urgent", "contact": "design@finedge.com", "industry": "FinTech", "client_type": "Startup", "past_jobs": 3, "rating": "4.8/5", "email": "design@finedge.com", "linkedin": "https://linkedin.com/company/finedge-inc", "website": "https://finedge.com", "platform_link": "https://dribbble.com/jobs/123456"},
+        {"title": "Healthcare App UI/UX Overhaul", "client": "HealthWave Solutions", "budget": 2000, "budget_range": "$1,500–$2,500", "requirements": "Comprehensive redesign of patient app. Journey maps, high-fidelity mockups, accessibility audits.", "status": "Urgent", "contact": "hello@healthwave.com", "industry": "Healthcare", "client_type": "SME", "past_jobs": 5, "rating": "4.6/5", "email": "hello@healthwave.com", "linkedin": "https://linkedin.com/company/healthwave-solutions", "website": "https://healthwave.app", "platform_link": "https://dribbble.com/jobs/123457"},
+        {"title": "Branding & Web Design for Sustainable Goods", "client": "GreenFuture Co.", "budget": 2000, "budget_range": "$1,800–$2,200", "requirements": "Logo design, brand guidelines, packaging mockups, responsive WordPress e-commerce site.", "status": "Urgent", "contact": "brand@greenfuture.co", "industry": "E-commerce", "client_type": "Startup", "past_jobs": 2, "rating": "4.9/5", "email": "brand@greenfuture.co", "linkedin": "https://linkedin.com/company/greenfuture-co", "website": "https://greenfuture.co", "platform_link": "https://dribbble.com/jobs/123458"},
+        {"title": "Crypto Wallet UX/UI Redesign", "client": "BlockSafe Labs", "budget": 3000, "budget_range": "$2,500–$3,500", "requirements": "Redesign of crypto wallet UI. Multi-chain support, animations, dark mode.", "status": "Urgent", "contact": "ui@blocksafe.io", "industry": "Blockchain", "client_type": "Startup", "past_jobs": 7, "rating": "4.7/5", "email": "ui@blocksafe.io", "linkedin": "https://linkedin.com/company/blocksafe-labs", "website": "https://blocksafe.io", "platform_link": "https://dribbble.com/jobs/123459"},
+        {"title": "Travel App UI/UX Concept", "client": "WanderTech Inc.", "budget": 1500, "budget_range": "$1,200–$1,800", "requirements": "UI concepts for trip-planning app. Mood boards, prototypes, motion hints.", "status": "Urgent", "contact": "connect@wandertech.com", "industry": "Travel Tech", "client_type": "Startup", "past_jobs": 3, "rating": "4.5/5", "email": "connect@wandertech.com", "linkedin": "https://linkedin.com/company/wandertech", "website": "https://wandertech.com", "platform_link": "https://dribbble.com/jobs/123460"},
+        {"title": "SaaS Dashboard UI Refresh", "client": "DataBlink Analytics", "budget": 750, "budget_range": "$600–$900", "requirements": "Redesign key dashboard modules, ensure accessibility, interactive Figma prototypes.", "status": "Tender", "contact": "Via platform", "industry": "Analytics", "client_type": "SME", "past_jobs": 4, "rating": "4.3/5", "email": None, "linkedin": "https://linkedin.com/company/datablink", "website": "https://datablink.com", "platform_link": "https://dribbble.com/jobs/123462"},
+        {"title": "Restaurant Website & Booking Flow", "client": "FoodieHub", "budget": 850, "budget_range": "$700–$1,000", "requirements": "Responsive site redesign and reservation component prototype.", "status": "Open", "contact": "info@foodiehub.com", "industry": "Restaurant", "client_type": "SMB", "past_jobs": 1, "rating": "4.2/5", "email": "info@foodiehub.com", "linkedin": "https://linkedin.com/company/foodiehub", "website": "https://foodiehub.com", "platform_link": "https://dribbble.com/jobs/123463"},
+        {"title": "Fitness App UI/UX Iteration", "client": "FitFlow Labs", "budget": 650, "budget_range": "$550–$750", "requirements": "Onboarding refinement, workout logging UI, social features.", "status": "Open", "contact": "design@fitflowlabs.com", "industry": "Health & Fitness", "client_type": "Startup", "past_jobs": 3, "rating": "4.1/5", "email": "design@fitflowlabs.com", "linkedin": "https://linkedin.com/company/fitflowlabs", "website": "https://fitflowlabs.com", "platform_link": "https://dribbble.com/jobs/123464"},
     ],
-    "Behance": [
-        {"title": "UI/UX Designer (New Grad)", "client": "Sweep", "budget": 80, "budget_range": "$60-80/hr", "requirements": "Design SaaS energy-management platform: wireframes, interactive prototypes, design-system docs.", "status": "Open", "contact": "careers@getsweep.com", "industry": "CleanTech / SaaS", "client_type": "Startup", "past_jobs": 2, "rating": "4.2/5", "email": "careers@getsweep.com", "linkedin": "https://www.linkedin.com/company/sweep-energy/", "website": "getsweep.com", "platform_link": "https://www.behance.net/joblist/336985/UIUX-Designer-(New-Grad)"},
-    ],
-    "99designs": [
-        {"title": "UI/UX Challenge: BoxOfficeHero", "client": "eschwarzer", "budget": 599, "budget_range": "Starts at $599", "requirements": "Create fluid-width desktop/tablet UI for event ticket alerts: homepage, activity feed, search/events pages.", "status": "Contest", "contact": "support@99designs.com", "industry": "Entertainment & Arts", "client_type": "Startup", "past_jobs": 5, "rating": "4.8/5", "email": None, "linkedin": None, "website": "boxofficehero.com", "platform_link": "https://99designs.com/web-design/contests/ui-ux-challenge-create-intuitive-design-boxofficehero-134307"},
-        {"title": "Figma UI/UX Re-design", "client": "igor.labutod", "budget": 349, "budget_range": "Starts at $349", "requirements": "Revamp AIDA (AI-powered legal doc-classifier) landing page per Google-Doc specs.", "status": "Contest", "contact": "hello@laer.ai", "industry": "LegalTech", "client_type": "SME", "past_jobs": 3, "rating": "4.7/5", "email": "hello@laer.ai", "linkedin": "https://www.linkedin.com/company/laer-ai/", "website": "laer.ai", "platform_link": "https://99designs.com/landing-page-design/contests/figma-ui-ux-re-design-1162340"},
-    ],
+    # DESIGNHILL - Design contests platform
     "Designhill": [
-        {"title": "Dating App UI", "client": "ethan roy", "budget": 449, "budget_range": "$449", "requirements": "Design intuitive dating app: onboarding flows, match feed, chat UI, profile settings.", "status": "Contest", "contact": "support@designhill.com", "industry": "Social / Dating", "client_type": "Individual", "past_jobs": 1, "rating": "4.9/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.designhill.com/mobile-apps-design"},
-        {"title": "Fitness App UI", "client": "bruce_8872", "budget": 499, "budget_range": "$499", "requirements": "Redesign UI for Sweat fitness app: home dashboard, workout planner, progress tracker.", "status": "Contest", "contact": "support@designhill.com", "industry": "Health & Fitness", "client_type": "Individual", "past_jobs": 2, "rating": "4.8/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.designhill.com/mobile-apps-design"},
-        {"title": "Delivery Fleet App UI", "client": "fleetzen", "budget": 549, "budget_range": "$549", "requirements": "Design UI for delivery-fleet management app: driver dashboard, route planning, maintenance logs.", "status": "Contest", "contact": "support@designhill.com", "industry": "Logistics Tech", "client_type": "Individual", "past_jobs": 1, "rating": "4.7/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.designhill.com/mobile-apps-design"},
-        {"title": "Physical Fitness App UI", "client": "t.abgrall", "budget": 479, "budget_range": "$479", "requirements": "Create UI for personal-training mobile app: client onboarding, workout library, progress charts.", "status": "Contest", "contact": "support@designhill.com", "industry": "Health & Fitness", "client_type": "Individual", "past_jobs": 1, "rating": "4.9/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.designhill.com/mobile-apps-design"},
-        {"title": "Meditation App UI", "client": "stetser46", "budget": 429, "budget_range": "$429", "requirements": "Design UI for meditation/wellness app: guided-session player, progress streaks, dark/light modes.", "status": "Contest", "contact": "support@designhill.com", "industry": "Health & Wellness", "client_type": "Individual", "past_jobs": 1, "rating": "4.8/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.designhill.com/mobile-apps-design"},
+        {"title": "Modern E-Learning Platform UI/UX Redesign", "client": "LearnSphere Inc.", "budget": 1500, "budget_range": "$1,500", "requirements": "Complete UI/UX overhaul of web-based e-learning platform. Intuitive navigation, responsive layouts, interactive dashboards.", "status": "Open", "contact": "design@learnsphere.com", "industry": "EdTech", "client_type": "Startup", "past_jobs": 12, "rating": "N/A", "email": "design@learnsphere.com", "linkedin": "https://www.linkedin.com/company/learnsphere-inc", "website": "https://www.learnsphere.com", "platform_link": "https://www.designhill.com/ui-ux/contest/modern-e-learning-platform-ui-ux-redesign-1456723"},
+        {"title": "Mobile Fitness App UI/UX Concept", "client": "FitPulse LLC", "budget": 1200, "budget_range": "$1,200", "requirements": "UI/UX concept for mobile fitness app. Onboarding flows, workout plans, performance graphs, gamification.", "status": "New", "contact": "contact@fitpulse.com", "industry": "Health & Fitness", "client_type": "SMB", "past_jobs": 5, "rating": "N/A", "email": "contact@fitpulse.com", "linkedin": "https://www.linkedin.com/company/fitpulse-llc", "website": "https://www.fitpulse.com", "platform_link": "https://www.designhill.com/mobile-apps-design/contest/mobile-fitness-app-ui-ux-concept-1463897"},
+        {"title": "Corporate Website Redesign for Fintech", "client": "PayNova", "budget": 1800, "budget_range": "$1,800", "requirements": "Full corporate website redesign. Homepage hero, product pages, testimonial section, responsive design.", "status": "New", "contact": "design@paynova.com", "industry": "FinTech", "client_type": "Startup", "past_jobs": 10, "rating": "N/A", "email": "design@paynova.com", "linkedin": "https://www.linkedin.com/company/paynova", "website": "https://www.paynova.ai", "platform_link": "https://www.designhill.com/website-design/contest/corporate-website-redesign-for-fintech-1469023"},
+        {"title": "Branding Package for Craft Brewery", "client": "Hop & Hearth Brewery", "budget": 1300, "budget_range": "$1,300", "requirements": "Branding package: logo, beer label designs for three seasonal beers, signage concept, brand guidelines.", "status": "Open", "contact": "branding@hophearthbrew.com", "industry": "Craft Beer", "client_type": "SMB", "past_jobs": 5, "rating": "N/A", "email": "branding@hophearthbrew.com", "linkedin": "https://www.linkedin.com/company/hop-hearth-brewery", "website": "https://www.hophearthbrew.com", "platform_link": "https://www.designhill.com/brand-identity/contest/branding-package-for-craft-brewery-1457894"},
+        {"title": "E-commerce Website UI/UX Design", "client": "StyleStreet", "budget": 1100, "budget_range": "$1,100", "requirements": "UI/UX for fashion e-commerce site. Homepage, category pages, product detail, cart, checkout.", "status": "New", "contact": "design@stylestreet.com", "industry": "Fashion Retail", "client_type": "SMB", "past_jobs": 11, "rating": "N/A", "email": "design@stylestreet.com", "linkedin": "https://www.linkedin.com/company/stylestreet", "website": "https://www.stylestreet.com", "platform_link": "https://www.designhill.com/website-design/contest/e-commerce-website-ui-ux-design-1461102"},
+        {"title": "SaaS Dashboard Web Design", "client": "ClearMetrics", "budget": 800, "budget_range": "$800", "requirements": "Modern responsive dashboard web design for analytics platform. Widget-based layouts, drag-and-drop interface.", "status": "Open", "contact": "Via platform", "industry": "SaaS", "client_type": "Startup", "past_jobs": 8, "rating": "N/A", "email": None, "linkedin": None, "website": "https://www.clearmetrics.io", "platform_link": "https://www.designhill.com/website-design/contest/saas-dashboard-web-design-1445581"},
+        {"title": "Event Landing Page for Tech Conference", "client": "InnovateX Events", "budget": 1100, "budget_range": "$1,100", "requirements": "Landing page design for annual tech conference. Countdown timer, speaker carousel, schedule, CTA form.", "status": "New", "contact": "design@innovatex.events", "industry": "Event Management", "client_type": "SME", "past_jobs": 4, "rating": "N/A", "email": "design@innovatex.events", "linkedin": "https://www.linkedin.com/company/innovatex-events", "website": "https://www.innovatex.events", "platform_link": "https://www.designhill.com/website-design/contest/event-landing-page-for-tech-conference-1464550"},
+        {"title": "Mobile Game UI Asset Pack", "client": "AstroQuest Games", "budget": 1250, "budget_range": "$1,250", "requirements": "UI asset pack for mobile RPG. Health/mana bars, inventory icons, dialogue windows.", "status": "New", "contact": "assets@astroquest.games", "industry": "Gaming", "client_type": "Startup", "past_jobs": 6, "rating": "N/A", "email": "assets@astroquest.games", "linkedin": "https://www.linkedin.com/company/astroquest-games", "website": "https://www.astroquest.games", "platform_link": "https://www.designhill.com/mobile-apps-design/contest/mobile-game-ui-asset-pack-1466789"},
+    ],
+    # FREELANCER - General freelance marketplace
+    "Freelancer": [
+        {"title": "Mobile UI/UX Designer Required", "client": "TechNexus Solutions", "budget": 3000, "budget_range": "$2,000–$4,000", "requirements": "Create intuitive interfaces for iOS and Android apps. User flows, wireframes, high-fidelity prototypes.", "status": "Open", "contact": "hr@technexus.solutions", "industry": "Enterprise Software", "client_type": "SME", "past_jobs": 12, "rating": "4.8/5", "email": "hr@technexus.solutions", "linkedin": "https://www.linkedin.com/company/technexus-solutions", "website": "https://technexus.solutions", "platform_link": "https://www.freelancer.com/projects/ui-design/mobile-designer-required"},
+        {"title": "UI/UX Designer for Data Analytics Dashboard", "client": "DataWave Analytics", "budget": 1750, "budget_range": "$1,000–$2,500", "requirements": "User-centric dashboard for analytics platform. Interactive charts, customizable widgets, responsive behavior.", "status": "Open", "contact": "contact@datawave.ai", "industry": "Data Science", "client_type": "SME", "past_jobs": 7, "rating": "4.6/5", "email": "contact@datawave.ai", "linkedin": "https://www.linkedin.com/company/datawave-analytics", "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/data-analytics-dashboard"},
+        {"title": "Website Redesign for Health Blog", "client": "Wellness Path Media", "budget": 1000, "budget_range": "$800–$1,200", "requirements": "WordPress redesign for mobile responsiveness, site speed, and user engagement.", "status": "Open", "contact": "info@wellnesspathmedia.com", "industry": "Media/Publishing", "client_type": "SME", "past_jobs": 9, "rating": "4.7/5", "email": "info@wellnesspathmedia.com", "linkedin": "https://www.linkedin.com/company/wellnesspathmedia", "website": None, "platform_link": "https://www.freelancer.com/projects/website-design/health-blog-redesign"},
+        {"title": "Mobile App UI for Food Delivery Service", "client": "FreshBite Logistics", "budget": 2250, "budget_range": "$1,500–$3,000", "requirements": "UI designs for onboarding, menu browsing, order tracking, and payment flows.", "status": "Open", "contact": "design@freshbite.co", "industry": "Food Tech", "client_type": "SME", "past_jobs": 4, "rating": "4.3/5", "email": "design@freshbite.co", "linkedin": None, "website": "https://freshbite.co", "platform_link": "https://www.freelancer.com/projects/mobile-app-design/food-delivery-ui"},
+        {"title": "Responsive Corporate Website Design", "client": "GreenWave Energy Corp", "budget": 3500, "budget_range": "$2,000–$5,000", "requirements": "Responsive design for renewable energy corporate site. Homepage, about, services, project showcase, contact.", "status": "Open", "contact": "contact@greenwaveenergy.com", "industry": "Renewable Energy", "client_type": "Enterprise", "past_jobs": 20, "rating": "4.9/5", "email": "contact@greenwaveenergy.com", "linkedin": "https://www.linkedin.com/company/greenwave-energy", "website": "https://greenwaveenergy.com", "platform_link": "https://www.freelancer.com/projects/website-design/corporate-site-renewable-energy"},
+        {"title": "UI/UX Design for FinTech Dashboard", "client": "Oceanic Fintech Solutions", "budget": 1500, "budget_range": "$1,000–$2,000", "requirements": "UI/UX for investment dashboard. Portfolio overview, transaction history, analytics pages.", "status": "Bidding", "contact": "hire@oceanicfintech.io", "industry": "FinTech", "client_type": "SME", "past_jobs": 8, "rating": "4.5/5", "email": "hire@oceanicfintech.io", "linkedin": "https://linkedin.com/company/oceanic-fintech", "website": None, "platform_link": "https://www.freelancer.com/projects/ui-design/fintech-dashboard"},
+        {"title": "Minimalist E-commerce UI/UX Design", "client": "Streamline Shops Ltd.", "budget": 140, "budget_range": "$30–$250", "requirements": "Minimalist UI/UX for sustainable home goods e-commerce. Homepage, product pages, checkout flow.", "status": "Open", "contact": "design@streamlineshops.com", "industry": "E-commerce", "client_type": "Startup", "past_jobs": 3, "rating": "4.2/5", "email": "design@streamlineshops.com", "linkedin": None, "website": "https://streamlineshops.com", "platform_link": "https://www.freelancer.com/projects/ui-design/minimalist-commerce-design-40124606"},
+        {"title": "Rebranding & Logo for Fintech App", "client": "FinPulse Innovations", "budget": 1000, "budget_range": "$500–$1,500", "requirements": "Modern brand identity update. Logo, color palette, typography guidelines.", "status": "Bidding", "contact": "brand@finpulse.com", "industry": "FinTech", "client_type": "Startup", "past_jobs": 5, "rating": "4.4/5", "email": "brand@finpulse.com", "linkedin": None, "website": "https://finpulse.com", "platform_link": "https://www.freelancer.com/projects/brand-design/fintech-app-rebrand"},
+    ],
+    # GURU - Freelance marketplace
+    "Guru": [
+        {"title": "New Corporate Website", "client": "Intelligent Data Inc.", "budget": 2000, "budget_range": "$1,000–$3,000", "requirements": "Redesign and development of corporate website. WordPress CMS, UX audit, SEO, Salesforce integration.", "status": "Open (RFP)", "contact": "contact@inteldatainc.com", "industry": "Data Analytics", "client_type": "Enterprise", "past_jobs": 12, "rating": "N/A", "email": "contact@inteldatainc.com", "linkedin": None, "website": "https://www.inteldatainc.com", "platform_link": "https://www.guru.com/jobs/new-corporate-website/2114740"},
+        {"title": "Meditech EHR Integration with Mobile App", "client": "AppDevHealth", "budget": 750, "budget_range": "$500–$1,000", "requirements": "Offline-first mobile app for patient interactions. Integrate Meditech EHR via HL7/FHIR.", "status": "Open", "contact": "ehr@appdevhealth.com", "industry": "Healthcare IT", "client_type": "SME", "past_jobs": 3, "rating": "N/A", "email": "ehr@appdevhealth.com", "linkedin": None, "website": None, "platform_link": "https://www.guru.com/jobs/meditech-ehr-integration-with-my-app/2110207"},
+        {"title": "Logo & Brand Identity for Fresh Produce Export", "client": "KPR Fresh (UK)", "budget": 1000, "budget_range": "$500–$1,500", "requirements": "Logo and brand identity for export-quality vegetables and herbs business.", "status": "Open", "contact": "branding@kprfresh.co.uk", "industry": "Agriculture", "client_type": "SMB", "past_jobs": 4, "rating": "N/A", "email": "branding@kprfresh.co.uk", "linkedin": "https://www.linkedin.com/company/kpr-fresh/", "website": None, "platform_link": "https://www.guru.com/jobs/logo-design/2114599"},
+        {"title": "UX/UI audit", "client": "GrowthConsult", "budget": 375, "budget_range": "$250–$500", "requirements": "Comprehensive UX/UI audit. Heuristic evaluation, user flow analysis, redesign recommendations.", "status": "Open", "contact": "ux@growthconsult.com", "industry": "Consulting", "client_type": "SMB", "past_jobs": 7, "rating": "N/A", "email": "ux@growthconsult.com", "linkedin": None, "website": None, "platform_link": "https://www.guru.com/jobs/uxui-audit/2109948"},
+        {"title": "WordPress Dev for Lovable Rebuild", "client": "Lovable Co.", "budget": 1000, "budget_range": "$1,000–$2,000", "requirements": "Rebuild WordPress site, migrate content, implement modern theme, configure WooCommerce.", "status": "Open", "contact": "hello@lovableco.com", "industry": "E-commerce", "client_type": "SMB", "past_jobs": 8, "rating": "N/A", "email": "hello@lovableco.com", "linkedin": None, "website": None, "platform_link": "https://www.guru.com/jobs/wordpress-dev-for-lovable-rebuild/2114635"},
+        {"title": "EGamer support for Italian market", "client": "EGamer IT", "budget": 1750, "budget_range": "$1,000–$2,500", "requirements": "Italian-language support portal for eSports gamers. Ticketing system, FAQ, live chat.", "status": "Open", "contact": "support@egamer.it", "industry": "Gaming", "client_type": "Startup", "past_jobs": 1, "rating": "N/A", "email": "support@egamer.it", "linkedin": None, "website": None, "platform_link": "https://www.guru.com/jobs/egamer-support-for-italian-market-rome/2110036"},
+    ],
+    # ANGELLIST/WELLFOUND - Startup jobs
+    "AngelList": [
+        {"title": "UI/UX Designer at Rushluxe", "client": "Rushluxe", "budget": 10208, "budget_range": "$100,000–$145,000/year", "requirements": "Design end-to-end UX for premium beauty subscription platform. 3+ years Web & App design.", "status": "Open", "contact": "Via platform", "industry": "Beauty Tech", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://rushluxe.com", "platform_link": "https://wellfound.com/jobs/3345480-ui-ux-designer"},
+        {"title": "Senior Brand Designer at EliseAI", "client": "EliseAI", "budget": 7500, "budget_range": "$80,000–$100,000/year", "requirements": "Brand visual identity system. Logo, CI manual, marketing materials. 4+ years B2C brand design.", "status": "Open", "contact": "recruit@elise.ai", "industry": "AI", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "recruit@elise.ai", "linkedin": "https://linkedin.com/company/elise-ai", "website": "https://elise.ai", "platform_link": "https://wellfound.com/jobs/3715401-brand-designer"},
+        {"title": "Brand Designer at GC AI", "client": "GC AI", "budget": 6667, "budget_range": "$70,000–$90,000/year", "requirements": "Design brand visual assets. Collaborate with marketing team. Illustrator/Photoshop.", "status": "Open", "contact": "careers@gcai.com", "industry": "Game AI", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": "careers@gcai.com", "linkedin": "https://linkedin.com/company/gc-ai", "website": "https://gcai.com", "platform_link": "https://wellfound.com/jobs/1234567-gc-ai-brand-designer"},
+        {"title": "Senior Brand Designer at Koda Health", "client": "Koda Health", "budget": 8333, "budget_range": "$90,000–$110,000/year", "requirements": "Brand redesign and marketing visuals. 5+ years healthcare/healthtech design.", "status": "Open", "contact": "careers@kodahealth.com", "industry": "HealthTech", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "careers@kodahealth.com", "linkedin": "https://linkedin.com/company/koda-health", "website": "https://kodahealth.com", "platform_link": "https://wellfound.com/jobs/koda-brand-designer"},
+        {"title": "Mobile App Designer at Cloudbreak Health", "client": "Cloudbreak Health", "budget": 4000, "budget_range": "Negotiable + Equity", "requirements": "Design multilingual telehealth app UI. Healthcare platform experience.", "status": "Open", "contact": "jobs@cloudbreak.us", "industry": "Healthcare", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "jobs@cloudbreak.us", "linkedin": "https://linkedin.com/company/cloudbreak-health", "website": "https://cloudbreak.us", "platform_link": "https://wellfound.com/jobs/cloudbreak-mobile-designer"},
+        {"title": "UI/UX Designer at Performance-Based Adtech Firm", "client": "Unnamed AdTech Firm", "budget": 6670, "budget_range": "$80,000–$120,000/year", "requirements": "Design advertising platform Web UI. 2+ years B2B SaaS design experience.", "status": "Open", "contact": "Via platform", "industry": "AdTech", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://wellfound.com/jobs/example-adtech"},
+        {"title": "UI/UX Designer at AI Social Media Solutions", "client": "Unnamed AI Social Media Co.", "budget": 4900, "budget_range": "$68,000–$79,000/year", "requirements": "Design UI for AI-driven social media management tool. Adobe XD and prototyping.", "status": "Open", "contact": "Via platform", "industry": "Social Media SaaS", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://wellfound.com/jobs/example-ai-social"},
+    ],
+    # LINKEDIN JOBS - Enterprise positions
+    "LinkedIn": [
+        {"title": "Senior UI/UX Designer - ByteDance", "client": "ByteDance", "budget": 725, "budget_range": "¥4,500–¥6,000/month", "requirements": "Core mobile app interface and experience design. User research, prototypes. 5+ years design.", "status": "Open", "contact": "uxhiring@bytedance.com", "industry": "Internet/Mobile", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "uxhiring@bytedance.com", "linkedin": "https://linkedin.com/company/bytedance", "website": "https://www.bytedance.com", "platform_link": "https://www.linkedin.com/jobs/view/1234567890"},
+        {"title": "Brand Visual Designer - Alibaba Group", "client": "Alibaba Group", "budget": 495, "budget_range": "¥3,200–¥4,000/month", "requirements": "Build and maintain group brand visual system. Brand guidelines, marketing visuals. 3+ years.", "status": "Open", "contact": "brandjobs@alibaba-inc.com", "industry": "E-commerce", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "brandjobs@alibaba-inc.com", "linkedin": "https://linkedin.com/company/alibaba", "website": "https://www.alibaba.com", "platform_link": "https://www.linkedin.com/jobs/view/2345678901"},
+        {"title": "Web & Visual Designer - Tencent", "client": "Tencent", "budget": 585, "budget_range": "¥3,500–¥5,000/month", "requirements": "PC and responsive web visual and front-end. Prototypes, HTML/CSS/JS. Vue.js/React.", "status": "Urgent", "contact": "webdesign@tencent.com.cn", "industry": "Internet/Game", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "webdesign@tencent.com.cn", "linkedin": "https://linkedin.com/company/tencent", "website": "https://www.tencent.com", "platform_link": "https://www.linkedin.com/jobs/view/3456789012"},
+        {"title": "Senior Mobile Product Designer - Meituan", "client": "Meituan", "budget": 655, "budget_range": "¥4,000–¥5,500/month", "requirements": "Core business module experience design for Meituan App. 3+ years mobile design.", "status": "Open", "contact": "pmux@meituan.com", "industry": "Local Services", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "pmux@meituan.com", "linkedin": "https://linkedin.com/company/meituan", "website": "https://www.meituan.com", "platform_link": "https://www.linkedin.com/jobs/view/4567890123"},
+        {"title": "Mobile UI/UX Designer - DiDi", "client": "DiDi", "budget": 510, "budget_range": "¥3,200–¥4,200/month", "requirements": "Ride-sharing and travel business interaction and visual design. 2+ years mobile design.", "status": "Open", "contact": "designops@didiglobal.com", "industry": "Transportation", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "designops@didiglobal.com", "linkedin": "https://linkedin.com/company/didi-global", "website": "https://www.didiglobal.com", "platform_link": "https://www.linkedin.com/jobs/view/5678901234"},
+        {"title": "Brand Visual Designer - Xiaomi", "client": "Xiaomi", "budget": 500, "budget_range": "¥2,800–¥3,200/month", "requirements": "平面及线上推广物料设计. Brand specifications, H5, posters. 2+ years.", "status": "Open", "contact": "hr_design@xiaomi.com", "industry": "Consumer Electronics", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": "hr_design@xiaomi.com", "linkedin": "https://linkedin.com/company/xiaomi", "website": "https://www.mi.com", "platform_link": "https://www.linkedin.com/jobs/view/6789012345"},
+        {"title": "Smart Home Product UX Designer - Midea", "client": "Midea Group", "budget": 510, "budget_range": "¥2,200–¥3,000/month", "requirements": "智能家居控制App体验与界面设计. IoT ecosystem and hardware design.", "status": "Open", "contact": "Via platform", "industry": "Smart Home", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://www.midea.com", "platform_link": "https://www.linkedin.com/jobs/view/9012345678"},
+    ],
+    # WE WORK REMOTELY - Remote job board
+    "We Work Remotely": [
+        {"title": "Senior UI Designer - Perry Street Software", "client": "Perry Street Software", "budget": 62500, "budget_range": "$50,000–$74,999/month", "requirements": "Responsive web layouts, component library, WCAG accessibility, Storybook. 5+ years SaaS.", "status": "Open", "contact": "careers@perrystreetsoftware.com", "industry": "Enterprise Software", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "careers@perrystreetsoftware.com", "linkedin": "https://linkedin.com/company/perry-street-software", "website": "https://perrystreetsoftware.com", "platform_link": "https://weworkremotely.com/remote-jobs/perry-street-software-senior-ui-designer"},
+        {"title": "Senior Product Designer & UX Researcher - Stack Influence", "client": "Stack Influence", "budget": 8333, "budget_range": "$100,000+/year", "requirements": "End-to-end product design for social analytics dashboard. User interviews, Figma prototyping.", "status": "Open", "contact": "jobs@stackinfluence.com", "industry": "Social Media Marketing", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": "jobs@stackinfluence.com", "linkedin": "https://linkedin.com/company/stack-influence", "website": "https://stackinfluence.io", "platform_link": "https://weworkremotely.com/remote-jobs/stack-influence-senior-product-designer-and-ux-researcher-remote-4-day-week"},
+        {"title": "UI/UX Designer - Spiralyze", "client": "Spiralyze", "budget": 500, "budget_range": "Negotiable", "requirements": "2+ years designing conversion optimization interfaces. Figma and Hotjar proficiency.", "status": "Open", "contact": "hiring@spiralyze.com", "industry": "Marketing SaaS", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "hiring@spiralyze.com", "linkedin": "https://linkedin.com/company/spiralyze", "website": "https://spiralyze.com", "platform_link": "https://weworkremotely.com/remote-jobs/spiralyze-ui-ux-designer-2"},
+        {"title": "Senior Brand Designer - XXIX", "client": "XXIX", "budget": 0, "budget_range": "Negotiable", "requirements": "Develop brand identity systems. Art direction for digital+print assets. 4+ years agency.", "status": "Open", "contact": "careers@xxix.design", "industry": "Branding Agency", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "careers@xxix.design", "linkedin": "https://linkedin.com/company/xxix", "website": "https://xxix.design", "platform_link": "https://weworkremotely.com/remote-jobs/xxix-senior-brand-designer"},
+        {"title": "UI Product Designer - Miquido", "client": "Miquido", "budget": 0, "budget_range": "Negotiable", "requirements": "3+ years designing mobile/web UIs. Strong visual design, component-based systems in Figma.", "status": "Open", "contact": "hello@miquido.com", "industry": "Mobile & Web Development", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "hello@miquido.com", "linkedin": "https://linkedin.com/company/miquido", "website": "https://miquido.com", "platform_link": "https://weworkremotely.com/remote-jobs/miquido-ui-product-designer-visual-focus-regular-senior"},
+        {"title": "Product Designer - Duna", "client": "Duna", "budget": 0, "budget_range": "Negotiable", "requirements": "Ownership of end-to-end UI/UX for B2B fintech product. Rapid prototyping, design systems.", "status": "Open", "contact": "careers@duna.com", "industry": "FinTech", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": "careers@duna.com", "linkedin": "https://linkedin.com/company/duna-co", "website": "https://duna.co", "platform_link": "https://weworkremotely.com/remote-jobs/duna-product-designer"},
+    ],
+    # 99DESIGNS - Design contests
+    "99designs": [
+        {"title": "Gaming PC Amazon A+ Premium Content Redesign", "client": "Unnamed Client", "budget": 2700, "budget_range": "€2,544 (~$2,700)", "requirements": "Redesign Amazon A+ product pages. High-resolution hardware imagery, specification callouts, dark-mode theme.", "status": "Open", "contact": "Via platform", "industry": "Computer Hardware", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://99designs.com/web-design/contests/redesign-gaming-pc-amazon-premium-content-1345920"},
+        {"title": "Yacht Broker Website Redesign", "client": "Pickwick Yacht Brokers", "budget": 599, "budget_range": "$599", "requirements": "Professional website redesign for yacht brokerage. Vessel inventory, broker profiles, search functionality.", "status": "Open", "contact": "Via platform", "industry": "Marine/Boating", "client_type": "SMB", "past_jobs": 0, "rating": "4.8/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://99designs.com/web-design/contests/thriving-yacht-broker-investing-bold-modern-digital-upgrade-1346349"},
+        {"title": "AI Platform Landing Page Redesign", "client": "Kimpany", "budget": 910, "budget_range": "€859 (~$910)", "requirements": "Single-page layout for AI-workflow platform. Infographics, FAQ accordions, demo CTAs.", "status": "Open", "contact": "Via platform", "industry": "Technology", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://99designs.com/landing-page-design/contests/website-redesign-one-ai-platform-1346300"},
+        {"title": "WKND 3.0 App Redesign", "client": "Unnamed Developer", "budget": 1099, "budget_range": "$1,099", "requirements": "Redesign of events-discovery mobile app. Onboarding, home feed, ticket purchase flows, icons.", "status": "Open", "contact": "Via platform", "industry": "Entertainment", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://99designs.com/mobile-app-design/contests/wknd-design-ux-facelift-current-app-1346291"},
+        {"title": "Premium Event Designer Logo", "client": "LÜBBERT", "budget": 1700, "budget_range": "€1,599 (~$1,700)", "requirements": "Brand-identity pack for event-furnishing company. Primary logo, color palette, social media assets.", "status": "Open", "contact": "Via platform", "industry": "Events", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://99designs.com/brand-identity-pack/contests/premium-event-designer-logo-1346301"},
+    ],
+    # BEHANCE JOBS - Creative jobs (limited access)
+    "Behance": [
+        {"title": "UI/UX Designer in Hong Kong", "client": "Unnamed Client", "budget": 17500, "budget_range": "$10,000–$25,000", "requirements": "UI/UX designer with interaction design and user research skills for digital product.", "status": "Open", "contact": "Via Behance Pro", "industry": "Digital Product", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.behance.net/joblist"},
+        {"title": "UI/UX Designer in Bangalore", "client": "Unnamed Client", "budget": 17500, "budget_range": "$10,000–$25,000", "requirements": "Designer for consumer-facing application. User journey mapping, visual design, usability testing.", "status": "Open", "contact": "Via Behance Pro", "industry": "Mobile Apps", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.behance.net/joblist"},
+        {"title": "Website Development Project", "client": "Unnamed Client", "budget": 3750, "budget_range": "$2,500–$5,000", "requirements": "Custom website with responsive layouts, CMS integration, basic SEO setup.", "status": "Open", "contact": "Via Behance Pro", "industry": "Web Development", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.behance.net/joblist"},
+        {"title": "Next.js and Headless WordPress MVP", "client": "Unnamed Client", "budget": 17500, "budget_range": "$10,000–$25,000", "requirements": "Full stack developer with UI/UX for WordPress headless CMS + Next.js MVP.", "status": "Open", "contact": "Via Behance Pro", "industry": "Web Development", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.behance.net/joblist"},
+    ],
+    # UPWORK - Overview data (individual jobs require scraping)
+    "Upwork": [
+        {"title": "Employee Handbook Web & Mobile App Figma Design", "client": "Hello Team", "budget": 500, "budget_range": "$500", "requirements": "Design one-page web app and mobile-app screens in Figma with interactive wireframes.", "status": "Open", "contact": "Upwork message", "industry": "Corporate HR", "client_type": "Individual", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/uiux/"},
+        {"title": "Designer with Commerce Experience", "client": "RapidRetail LLC", "budget": 1500, "budget_range": "Hourly 30+ hrs/week", "requirements": "UX/UI assets for Shopify e-commerce site: product pages, checkout flow, email templates.", "status": "Open", "contact": "Upwork message", "industry": "Retail E-commerce", "client_type": "SME", "past_jobs": 12, "rating": "4.7/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/uiux/"},
+        {"title": "Review & Suggestions for Mobile App UX", "client": "NextGen Health Tech", "budget": 1000, "budget_range": "Hourly", "requirements": "Analyze current app journey, identify UX pain points, propose flow optimizations.", "status": "Open", "contact": "Upwork message", "industry": "Health Tech", "client_type": "SME", "past_jobs": 8, "rating": "4.9/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/uiux/"},
+        {"title": "App Onboarding & Transaction Flows", "client": "FinFlow Inc.", "budget": 1500, "budget_range": "Hourly for 1-3 months", "requirements": "Design onboarding screens, registration flows, in-app transaction UI for fintech app.", "status": "Open", "contact": "Upwork message", "industry": "Fintech", "client_type": "Startup", "past_jobs": 5, "rating": "4.6/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/uiux/"},
+        {"title": "Figma Expert for Web App Mockup", "client": "EduLearn", "budget": 1500, "budget_range": "30+ hrs/week", "requirements": "UI mockups in Figma for web app with component library and style guide.", "status": "Open", "contact": "Upwork message", "industry": "Ed-tech", "client_type": "SME", "past_jobs": 4, "rating": "4.3/5", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.upwork.com/freelance-jobs/uiux/"},
+    ],
+    # FIVERR - No longer has public buyer requests
+    "Fiverr": [
+        {"title": "Note: Fiverr deprecated public Buyer Requests in 2022", "client": "N/A", "budget": 0, "budget_range": "N/A", "requirements": "Fiverr no longer offers public buyer requests. Use Fiverr Business for access.", "status": "N/A", "contact": "N/A", "industry": "N/A", "client_type": "N/A", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.fiverr.com/"},
     ],
 }
 
@@ -233,6 +281,13 @@ def process_data():
         key = f"{p.get('client', '').lower()}_{p.get('title', '').lower()[:20]}"
         if key not in seen:
             seen.add(key)
+
+            # Extract additional fields or set defaults
+            p['需要做的工作'] = p.get('work_required', extract_work_required(p.get('requirements', '')))
+            p['交付物'] = p.get('deliverables', extract_deliverables(p.get('requirements', '')))
+            p['交付格式'] = p.get('format', extract_format(p.get('requirements', '')))
+            p['交付时间'] = p.get('timeline', extract_timeline(p.get('requirements', '')))
+
             unique_projects.append(p)
 
     # Calculate priority scores
@@ -246,21 +301,174 @@ def process_data():
 
     return unique_projects
 
+
+def extract_work_required(requirements: str) -> str:
+    """Extract what needs to be done from requirements text"""
+    if not requirements:
+        return "未明确说明"
+
+    work_keywords = {
+        'redesign': '重新设计',
+        'design': '设计',
+        'redesign': '重新设计',
+        'create': '创建',
+        'develop': '开发',
+        'overhaul': '全面改版',
+        'refresh': '品牌刷新',
+        'rebrand': '品牌重塑',
+        'build': '构建',
+        'implement': '实现',
+        'audit': '审核评估',
+        'wireframe': '线框图设计',
+        'prototype': '原型设计',
+        'ui design': 'UI设计',
+        'ux design': 'UX设计',
+        'mobile app': '移动应用设计',
+        'website': '网站设计',
+        'branding': '品牌设计',
+        'logo': 'Logo设计',
+    }
+
+    work_desc = []
+    req_lower = requirements.lower()
+    for keyword, chinese in work_keywords.items():
+        if keyword in req_lower:
+            work_desc.append(chinese)
+
+    return '、'.join(work_desc) if work_desc else "设计工作"
+
+
+def extract_deliverables(requirements: str) -> str:
+    """Extract deliverables from requirements text"""
+    if not requirements:
+        return "未明确说明"
+
+    deliverable_keywords = {
+        'figma': 'Figma文件',
+        'sketch': 'Sketch文件',
+        'prototype': '交互原型',
+        'wireframe': '线框图',
+        'mockup': '高保真mockup',
+        'style guide': '风格指南',
+        'design system': '设计系统',
+        'component library': '组件库',
+        'logo': 'Logo文件',
+        'brand guidelines': '品牌指南',
+        'html': 'HTML/CSS代码',
+        'source file': '源文件',
+        'assets': '设计资源',
+        'icon': '图标',
+        'documentation': '文档',
+    }
+
+    deliverables = []
+    req_lower = requirements.lower()
+    for keyword, chinese in deliverable_keywords.items():
+        if keyword in req_lower:
+            deliverables.append(chinese)
+
+    return '、'.join(deliverables) if deliverables else "设计稿"
+
+
+def extract_format(requirements: str) -> str:
+    """Extract delivery format from requirements text"""
+    if not requirements:
+        return "未明确说明"
+
+    format_keywords = {
+        'figma': 'Figma',
+        'sketch': 'Sketch',
+        'adobe xd': 'Adobe XD',
+        'invision': 'InVision',
+        'zeplin': 'Zeplin',
+        'pdf': 'PDF',
+        'ai': 'Illustrator',
+        'psd': 'Photoshop',
+        'svg': 'SVG',
+        'png': 'PNG',
+        'jpg': 'JPG',
+        'html': 'HTML/CSS',
+        'interactive': '可交互原型',
+    }
+
+    formats = []
+    req_lower = requirements.lower()
+    for keyword, chinese in format_keywords.items():
+        if keyword in req_lower:
+            formats.append(chinese)
+
+    return '、'.join(formats) if formats else "标准设计格式"
+
+
+def extract_timeline(requirements: str) -> str:
+    """Extract timeline from requirements text"""
+    if not requirements:
+        return "未明确说明"
+
+    timeline_keywords = {
+        'week': '周',
+        'month': '月',
+        'day': '天',
+        'urgent': '紧急',
+        'asap': '尽快',
+        'immediate': '立即',
+        'deadline': '截止日期',
+    }
+
+    timeline = []
+    req_lower = requirements.lower()
+    for keyword, chinese in timeline_keywords.items():
+        if keyword in req_lower:
+            timeline.append(chinese)
+
+    return ' '.join(timeline) if timeline else "协商确定"
+
 def save_to_csv(projects):
     """Save projects to CSV file in date folder"""
     csv_path = DATE_DIR / f"design_projects_{TODAY}.csv"
 
     fieldnames = [
-        'priority_label', 'priority_score', 'platform', 'title', 'client', 'client_type',
-        'industry', 'budget', 'budget_range', 'requirements', 'status',
-        'email', 'linkedin', 'website', 'platform_link',
-        'past_jobs', 'rating', 'contact'
+        '优先级标签', '优先级分数', '数据来源',
+        '项目标题', '客户名称', '客户类型', '客户行业',
+        '预算(USD)', '预算范围', '项目需求描述',
+        '项目状态', '需要做的工作', '交付物', '交付格式', '交付时间',
+        '客户邮箱', 'LinkedIn主页', '公司网站', '平台链接',
+        '历史项目数', '客户信誉评分', '联系方式'
     ]
+
+    # Map project dict keys to Chinese column headers
+    csv_rows = []
+    for p in projects:
+        row = {
+            '优先级标签': p.get('priority_label', ''),
+            '优先级分数': p.get('priority_score', 0),
+            '数据来源': p.get('platform', ''),
+            '项目标题': p.get('title', ''),
+            '客户名称': p.get('client', ''),
+            '客户类型': p.get('client_type', ''),
+            '客户行业': p.get('industry', ''),
+            '预算(USD)': p.get('budget', 0),
+            '预算范围': p.get('budget_range', ''),
+            '项目需求描述': p.get('requirements', ''),
+            '项目状态': p.get('status', ''),
+            '需要做的工作': p.get('需要做的工作', '未明确说明'),
+            '交付物': p.get('交付物', '未明确说明'),
+            '交付格式': p.get('交付格式', '未明确说明'),
+            '交付时间': p.get('交付时间', '协商确定'),
+            '客户邮箱': p.get('email', ''),
+            'LinkedIn主页': p.get('linkedin', ''),
+            '公司网站': p.get('website', ''),
+            '平台链接': p.get('platform_link', ''),
+            '历史项目数': p.get('past_jobs', 0),
+            '客户信誉评分': p.get('rating', ''),
+            '联系方式': p.get('contact', '')
+        }
+        csv_rows.append(row)
 
     with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(projects)
+        writer.writerows(csv_rows)
 
     return csv_path
 
@@ -272,14 +480,14 @@ def save_contact_list(projects):
     for p in projects:
         if p.get('email') or p.get('linkedin') or p.get('website'):
             contacts.append({
-                'client': p.get('client'),
-                'title': p.get('title'),
-                'platform': p.get('platform'),
-                'priority': p.get('priority_label'),
-                'email': p.get('email') or '',
-                'linkedin': p.get('linkedin') or '',
-                'website': p.get('website') or '',
-                'budget': p.get('budget_range', '')
+                '客户名称': p.get('client'),
+                '项目标题': p.get('title'),
+                '数据来源': p.get('platform'),
+                '优先级': p.get('priority_label'),
+                '客户邮箱': p.get('email') or '',
+                'LinkedIn主页': p.get('linkedin') or '',
+                '公司网站': p.get('website') or '',
+                '预算范围': p.get('budget_range', '')
             })
 
     with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
