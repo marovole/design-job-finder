@@ -238,6 +238,82 @@ def generate_email_prompt(project: Dict, tone: str) -> str:
 5. `output/README.md` - 使用说明
 6. `.gitignore` - Git配置
 
+### 步骤7.5: 邮件内容验证 ⭐ **关键步骤**
+在生成输出后，**必须验证**所有营销邮件中的占位符已被正确替换:
+
+**验证方法**:
+```bash
+# 检查是否有未替换的占位符
+grep -r "{industry}" output/marketing_emails/
+grep -r "{title}" output/marketing_emails/
+grep -r "{client}" output/marketing_emails/
+
+# 如果输出为空，说明没有占位符残留 ✅
+```
+
+**常见问题及修复**:
+
+| 问题 | 原因 | 修复方法 |
+|------|------|----------|
+| `{industry}` 未替换 | f-string 缺少 `f` 前缀 | `value_prop = f"..."` |
+| `{title}` 未替换 | 多行字符串中变量未用 f-string | 将整段改为 f-string |
+| `None` 出现在邮件中 | 可选字段为空 | 使用 `or ''` 提供默认值 |
+
+**自动验证脚本**:
+```python
+import re
+import os
+
+def verify_emails(email_dir="output/marketing_emails"):
+    """验证所有邮件文件没有未替换的占位符"""
+    placeholder_pattern = r'\{[a-zA-Z_]+\}'
+    issues = []
+
+    for root, dirs, files in os.walk(email_dir):
+        for file in files:
+            if file.endswith('.md'):
+                filepath = os.path.join(root, file)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    matches = re.findall(placeholder_pattern, content)
+                    if matches:
+                        issues.append({
+                            'file': filepath,
+                            'placeholders': list(set(matches))
+                        })
+
+    if issues:
+        print("❌ 发现未替换的占位符:")
+        for issue in issues:
+            print(f"  - {issue['file']}: {issue['placeholders']}")
+        return False
+    else:
+        print("✅ 所有邮件已正确生成，无占位符残留")
+        return True
+
+# 运行验证
+if __name__ == "__main__":
+    verify_emails()
+```
+
+**修复后的 f-string 正确写法**:
+```python
+# ❌ 错误: 普通字符串中的变量不会被替换
+value_prop = "We've helped several {industry} startups..."
+
+# ✅ 正确: f-string 会正确替换变量
+value_prop = f"We've helped several {industry} startups..."
+```
+
+**验证流程**:
+1. 运行 `python3 process_design_projects.py`
+2. 执行验证脚本: `python3 verify_emails.py`
+3. 如果发现问题，检查 `generate_email_content()` 函数中的 f-string
+4. 重新生成邮件
+5. 再次验证直到通过
+
+**未经验证的邮件不得用于营销推广！**
+
 ### 步骤8: 版本控制 (可选)
 ```bash
 git add output/
