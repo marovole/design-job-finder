@@ -118,6 +118,159 @@ def validate_email(email: Any) -> ValidationResult:
 
 
 # ============================================
+# SMTP 邮箱存在性验证
+# ============================================
+
+def verify_email_exists_smtp(email: str, timeout: int = 10) -> ValidationResult:
+    """
+    通过 SMTP 握手验证邮箱是否真实存在
+
+    Args:
+        email: 邮箱地址
+        timeout: 连接超时时间（秒）
+
+    Returns:
+        ValidationResult: 校验结果
+    """
+    if not email or '@' not in email:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.INVALID,
+            message="邮箱格式无效"
+        )
+
+    domain = email.split('@')[-1].lower()
+
+    # 检查是否安装了 dns 模块
+    try:
+        import dns.resolver
+    except ImportError:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message="DNS 模块未安装，跳过邮箱验证",
+            details={"email": email, "error": "dnspython not installed"}
+        )
+
+    # 查询 MX 记录
+    try:
+        mx_records = dns.resolver.resolve(domain, 'MX', lifetime=timeout)
+        if not mx_records:
+            return ValidationResult(
+                field="email_exists",
+                status=ValidationStatus.INVALID,
+                message=f"域名 {domain} 无 MX 记录",
+                details={"domain": domain}
+            )
+    except dns.resolver.NoAnswer:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.INVALID,
+            message=f"域名 {domain} 无 MX 记录",
+            details={"domain": domain, "error": "No MX records found"}
+        )
+    except dns.resolver.NXDOMAIN:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.INVALID,
+            message=f"域名 {domain} 不存在",
+            details={"domain": domain, "error": "NXDOMAIN"}
+        )
+    except dns.resolver.Timeout:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"DNS 查询超时",
+            details={"domain": domain, "error": "DNS timeout"}
+        )
+    except Exception as e:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"DNS 查询失败: {str(e)[:50]}",
+            details={"domain": domain, "error": str(e)[:100]}
+        )
+
+    # SMTP 握手验证
+    try:
+        import smtplib
+        mx_host = str(mx_records[0].exchange).rstrip('.')
+        server = smtplib.SMTP(mx_host, timeout=timeout)
+        server.ehlo()
+
+        # 尝试 RCPT TO 命令验证邮箱
+        server.mail('verify@example.com')
+        code, message = server.rcpt(email)
+        server.quit()
+
+        # 250 = 邮箱存在, 550/551/552 = 邮箱不存在, 450/451 = 临时错误
+        if code == 250:
+            return ValidationResult(
+                field="email_exists",
+                status=ValidationStatus.VALID,
+                message="邮箱存在（SMTP 验证通过）",
+                details={"email": email, "smtp_code": code}
+            )
+        elif code in [550, 551, 552]:
+            return ValidationResult(
+                field="email_exists",
+                status=ValidationStatus.INVALID,
+                message="邮箱不存在",
+                details={"email": email, "smtp_code": code, "smtp_message": message.decode()}
+            )
+        else:
+            return ValidationResult(
+                field="email_exists",
+                status=ValidationStatus.UNKNOWN,
+                message=f"SMTP 验证结果不确定 (code={code})",
+                details={"email": email, "smtp_code": code, "smtp_message": message.decode()}
+            )
+
+    except smtplib.SMTPConnectError:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"无法连接邮件服务器",
+            details={"email": email, "mx_host": mx_host, "error": "Connection error"}
+        )
+    except smtplib.SMTPSenderRefused:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"邮件服务器拒绝连接",
+            details={"email": email, "error": "Sender refused"}
+        )
+    except smtplib.SMTPRecipientsRefused:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.INVALID,
+            message="邮箱被服务器拒绝",
+            details={"email": email, "error": "Recipients refused"}
+        )
+    except smtplib.SMTPException as e:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"SMTP 错误: {str(e)[:50]}",
+            details={"email": email, "error": str(e)[:100]}
+        )
+    except TimeoutError:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message="SMTP 连接超时",
+            details={"email": email, "error": "Timeout"}
+        )
+    except Exception as e:
+        return ValidationResult(
+            field="email_exists",
+            status=ValidationStatus.UNKNOWN,
+            message=f"验证出错: {str(e)[:50]}",
+            details={"email": email, "error": str(e)[:100]}
+        )
+
+
+# ============================================
 # 链接格式验证
 # ============================================
 

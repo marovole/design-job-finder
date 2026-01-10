@@ -1,13 +1,32 @@
 ---
 name: design-project-finder
 description: "搜索海外设计工作平台,找到与用户专长匹配的项目,生成个性化营销邮件"
+version: "2.0.0"
 ---
 
-# 设计项目与客户搜索器 (Design Project Finder)
+# 设计项目与客户搜索器 (Design Project Finder) v2.0
 
 > **一键执行**: `python3 process_design_projects.py`
+>
+> **带增强验证**: `python3 process_design_projects.py --realtime-verify`
+>
+> **生成AI邮件**: `python3 process_design_projects.py --generate-emails`
+>
+> **完整模式**: `python3 process_design_projects.py --full`
 
-> **带校验执行**: `python3 process_design_projects.py` (自动校验并过滤无效项目)
+---
+
+## 🆕 v2.0 新功能
+
+### 增强验证系统
+- **多层邮箱验证**: 格式 → MX记录 → 一次性邮箱检测 → SMTP
+- **智能URL验证**: LinkedIn专用格式验证 + 异步可达性检测 + 缓存
+- **实时验证**: 数据收集时即验证，不再事后处理
+
+### 深度个性化邮件
+- **项目需求分析**: 自动提取技术需求、推断痛点、检测项目阶段
+- **成就智能匹配**: 多维度匹配用户作品集与项目需求
+- **推销角度优化**: 根据匹配结果确定最佳推销角度
 
 ---
 
@@ -117,34 +136,98 @@ result = mcp__exa__deep_researcher_check(taskId=task_id)
 4. **匹配度评分** → 基于用户专长关键词、行业、客户类型
 5. **输出 JSON** → 包含 `match_score` 和 `recommended_highlight`
 
-### 阶段2.5: 数据校验 (自动)
+### 阶段2.5: 数据校验 (自动/增强)
 
-数据处理过程中会自动进行校验：
+#### 增强验证模式 (v2.0 推荐)
+
+使用 `--realtime-verify` 启用多层验证：
+
+```bash
+python3 process_design_projects.py --realtime-verify --verification-level standard
+```
+
+**验证级别：**
+| 级别 | 邮箱检查 | URL检查 | 速度 |
+|------|---------|--------|------|
+| `quick` | 仅格式 | 仅格式 | 最快 |
+| `standard` | 格式+MX+一次性检测 | 格式+LinkedIn验证 | 推荐 |
+| `full` | 全部+SMTP | 全部+可达性 | 较慢 |
+
+#### 增强验证配置
 
 ```python
-# 校验配置 (process_design_projects.py)
+# 新版配置 (process_design_projects.py)
+VERIFICATION_CONFIG = {
+    'enabled': True,              # 启用校验
+    'use_enhanced': True,         # 使用增强v2.0验证
+    'check_email_format': True,   # 邮箱格式验证
+    'check_email_mx': True,       # MX记录验证（新）
+    'check_disposable': True,     # 一次性邮箱检测（新）
+    'check_email_exists': False,  # SMTP验证（慢，默认关闭）
+    'check_link_format': True,    # URL格式验证
+    'check_accessibility': False, # HTTP可达性验证（慢）
+    'remove_invalid': False,      # 保留所有项目，标记无效
+    'verification_level': 'standard',  # quick/standard/full
+}
+```
+
+#### 多层邮箱验证流程
+
+```
+Tier 1: 格式验证 (正则匹配)
+    ↓ 通过
+Tier 2: MX记录验证 (域名有邮件服务器配置)
+    ↓ 通过
+Tier 3: 一次性邮箱检测 (黑名单域名匹配)
+    ↓ 通过
+Tier 4: SMTP验证 (RCPT TO命令，可选)
+    ↓ 通过
+✓ 邮箱有效
+```
+
+**一次性邮箱检测：**
+- 内置 150+ 常见一次性邮箱域名
+- 支持自定义域名列表 (`disposable_domains.txt`)
+- 自动识别可疑模式 (temp*, throwaway*, etc.)
+
+#### 旧版验证配置（兼容）
+
+```python
+# 旧版配置
 VERIFICATION_CONFIG = {
     'enabled': True,              # 启用校验
     'check_email_format': True,   # 邮箱格式验证
+    'check_email_exists': True,   # 邮箱存在性验证 (SMTP)
     'check_link_format': True,    # 链接格式验证
     'check_accessibility': False, # 链接可访问性（慢，需Playwright MCP）
     'check_activity': False,      # 项目活跃度（慢，需Exa AI MCP）
-    'remove_invalid': True        # 从输出中移除无效项目
+    'remove_invalid': False       # 保留所有项目，标记无效项目
 }
 ```
 
 **校验内容：**
 - 邮箱格式验证 (正则表达式)
+- 邮箱存在性验证 (SMTP 握手，无需 API)
 - URL 格式验证 (website, linkedin, platform_link)
 - 链接可访问性验证 (可选，使用 Playwright MCP)
 - 项目活跃度验证 (可选，使用 Exa AI 搜索)
 
-**输出字段：**
+**CSV 输出字段：**
 | 字段 | 说明 |
 |------|------|
-| `is_valid` | 是否有效 (true/false) |
-| `validation_notes` | 校验问题列表 |
-| `validated_at` | 校验时间戳 |
+| `是否有效` | 格式校验是否通过 |
+| `完全验证通过` | 网站可访问 + 邮箱存在 |
+| `网站可访问` | 是/否/未知 |
+| `网站标题` | 页面标题 |
+| `邮箱格式正确` | 是/否 |
+| `邮箱存在` | 是/否/未知 |
+| `校验备注` | 校验问题列表 |
+| `校验时间` | 校验时间戳 |
+
+**SMTP 邮箱验证说明：**
+- 通过 SMTP RCPT TO 命令验证邮箱是否存在
+- 无需 API key，完全免费
+- 可能被部分邮件服务器拒绝（会标记为"未知"）
 
 ### 阶段3: AI 邮件生成
 
@@ -334,22 +417,35 @@ python3 design-project-finder/verify_project_data.py --full-check --async
 
 ```
 design-project-finder/
-├── SKILL.md                    # 本文档
-├── user_profile.yaml           # 用户背景配置
-├── generate_marketing_emails.py
-└── verify_emails.py
+├── SKILL.md                        # 本文档
+├── __init__.py                     # 包初始化 (v2.0)
+├── user_profile.yaml               # 用户背景配置
+│
+├── # v2.0 核心模块
+├── enhanced_email_validator.py     # 多层邮箱验证
+├── smart_url_validator.py          # 智能URL验证
+├── realtime_verifier.py            # 实时验证协调器
+├── project_analyzer.py             # 项目需求深度分析
+├── achievement_matcher.py          # 用户成就智能匹配
+├── personalized_email_generator.py # 个性化邮件生成
+├── disposable_domains.txt          # 一次性邮箱域名列表
+│
+├── # 辅助脚本
+├── generate_marketing_emails.py    # 模板邮件生成
+├── generate_ai_emails.py           # AI邮件生成脚本
+└── verify_emails.py                # 邮件验证
 
 output/
-├── latest/                     # 指向最新日期
+├── latest/                         # 指向最新日期
 └── YYYY-MM-DD/
     ├── projects_for_ai_emails_*.json
     ├── design_projects_*.csv
     ├── contact_list_*.csv
     ├── design_projects_summary_*.md
     └── marketing_emails/
-        ├── ai_generated/       # Claude 个性化邮件
-        ├── high_priority/      # A/B级模板邮件
-        └── medium_priority/    # C级模板邮件
+        ├── ai_generated/           # Claude 个性化邮件
+        ├── high_priority/          # A/B级模板邮件
+        └── medium_priority/        # C级模板邮件
 ```
 
 ---
@@ -458,12 +554,14 @@ email_signature: |
 
 ## 版本历史
 
-- **v2.1** (2026-01-10): 添加数据校验功能
-  - 邮箱格式验证
-  - 链接格式验证
-  - 可选的链接可访问性检查（Playwright MCP）
-  - 可选的项目活跃度检查（Exa AI MCP）
-  - 自动过滤无效项目
+- **v2.0** (2026-01-10): 增强验证 + 深度个性化邮件
+  - **多层邮箱验证**: 格式 → MX记录 → 一次性邮箱检测 → SMTP
+  - **智能URL验证**: LinkedIn专用格式验证 + 异步可达性检测 + 缓存
+  - **实时验证**: 数据收集时即验证，不再事后处理
+  - **项目需求分析**: 自动提取技术需求、推断痛点、检测项目阶段
+  - **成就智能匹配**: 多维度匹配用户作品集与项目需求
+  - **推销角度优化**: 根据匹配结果确定最佳推销角度
+  - 新增 `--realtime-verify`、`--generate-emails`、`--full` 参数
 
-- **v2.0** (2026-01-09): 添加用户背景匹配、个性化邮件生成
+- **v1.1** (2026-01-09): 添加用户背景匹配、模板邮件生成
 - **v1.0** (2026-01-08): 初始版本

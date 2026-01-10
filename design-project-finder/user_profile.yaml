@@ -136,10 +136,41 @@ preferred_client_types:
 # WORK PREFERENCES
 # ============================================
 work_preference:
-  locations:
-    - "Remote"
-    - "苏州"
-    - "上海"
+  # 时区信息
+  timezone: "UTC+8 (中国/新加坡时间)"
+  location: "苏州/上海，中国"
+  current_time: "如需同步讨论，请安排在中国时间 9:00-21:00 之间"
+
+  # 工作类型偏好
+  work_types:
+    preferred:
+      - "Remote"  # 优先远程
+      - "Part-time"  # 兼职
+      - "Project-based"  # 项目合作
+      - "Freelance"  # 自由职业
+      - "Contract"  # 合同制
+    acceptable:
+      - "Hybrid"  # 混合办公
+      - "On-site"  # 现场办公（仅限本地）
+
+  # 沟通偏好
+  communication:
+    preferred: "邮件沟通"
+    acceptable:
+      - "即时通讯（Slack/微信/飞书）"
+      - "异步视频消息（Loom）"
+    not_preferred:
+      - "电话沟通"  # 明确拒绝电话
+      - "视频会议"  # 仅限必要情况
+    note: "作为远程工作者，我倾向于通过邮件进行异步沟通，这能保证工作质量和专注度。如有需要，可以通过邮件安排异步沟通方式。"
+
+  # 远程工作详情
+  remote_details:
+    fully_remote: true
+    timezone_flexible: false  # 时区不灵活，需要对方配合
+    overlap_hours: "2-4 小时与中国时间重叠（例如美国西海岸 18:00-22:00）"
+    communication_style: "异步优先"
+
   accepts_remote: true
   salary_range:
     min: 25000
@@ -196,6 +227,29 @@ email_templates:
     With 10+ years in UX design and product management, including 6 years
     at Huawei working on enterprise-scale platforms, I bring deep expertise
     in complex system design and user-centered product development.
+
+  # ============================================
+  # PART-TIME/PROJECT-BASED WORK COMMUNICATION PREFERENCE
+  # ============================================
+  parttime_note: |
+    I'm based in China (UTC+8) and prefer email-based communication.
+    Happy to discuss project details via email exchange.
+
+  # CTA for part-time/project work
+  parttime_cta: |
+    Please feel free to reach out via email with any questions.
+    I'm happy to provide work samples, case studies, or additional information.
+
+  # ============================================
+  # REMOTE WORK SPECIFIC CTA
+  # ============================================
+  remote_cta: |
+    I'm fully remote-based in China (UTC+8) and have extensive experience
+    collaborating with international teams asynchronously.
+
+  # Standard CTA for full-time roles
+  fulltime_cta: |
+    I'd welcome the opportunity to discuss how my experience could contribute to your team.
 
 # ============================================
 # SIGNATURE FOR EMAILS

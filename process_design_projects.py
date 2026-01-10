@@ -3,11 +3,18 @@
 Design Project Finder - Data Processing & Marketing Email Generator
 Processes project data, deduplicates, calculates priority scores, and generates marketing emails.
 
-Verification Features:
-- Email format validation
-- URL format validation
-- Link accessibility checks (optional)
-- Project activity checks (optional)
+Enhanced Features (v2.0):
+- Real-time multi-tier email validation
+- Smart URL validation with caching
+- Deep project requirements analysis
+- Intelligent achievement matching
+- Personalized AI email generation
+
+Usage:
+    python3 process_design_projects.py                    # Standard mode
+    python3 process_design_projects.py --realtime-verify  # With real-time verification
+    python3 process_design_projects.py --generate-emails  # Generate AI personalized emails
+    python3 process_design_projects.py --full             # Both verification and emails
 """
 
 import csv
@@ -16,26 +23,49 @@ import os
 import json
 import yaml
 import sys
+import argparse
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
-# Add design-project-finder to path for verification module
+# Add design-project-finder to path for modules
 PROJECT_ROOT = Path(__file__).parent
 SKILL_DIR = PROJECT_ROOT / "design-project-finder"
 sys.path.insert(0, str(SKILL_DIR))
 
+# Legacy verification module (for backward compatibility)
 try:
     from verify_project_data import (
         validate_email,
         validate_url,
+        verify_email_exists_smtp,
         verify_project_sync,
-        filter_valid_projects,
+        filter_valid_projects as legacy_filter_valid_projects,
         ValidationStatus
     )
-    VERIFICATION_AVAILABLE = True
+    LEGACY_VERIFICATION_AVAILABLE = True
 except ImportError:
-    VERIFICATION_AVAILABLE = False
-    print("      Note: verify_project_data module not found, validation disabled")
+    LEGACY_VERIFICATION_AVAILABLE = False
+
+# New enhanced verification and email generation modules (v2.0)
+try:
+    from realtime_verifier import (
+        RealtimeVerifier,
+        VerificationConfig,
+        VerificationLevel,
+        apply_verification_to_project,
+        filter_valid_projects,
+    )
+    from personalized_email_generator import (
+        PersonalizedEmailGenerator,
+        save_email_to_file,
+    )
+    from project_analyzer import analyze_project
+    from achievement_matcher import match_achievements
+    ENHANCED_MODULES_AVAILABLE = True
+except ImportError as e:
+    ENHANCED_MODULES_AVAILABLE = False
+    print(f"      Note: Enhanced modules not fully available: {e}")
 
 # Output directory structure for daily runs
 OUTPUT_DIR = Path("output")
@@ -65,16 +95,29 @@ def update_latest_symlink():
         print(f"      Note: Symlink not supported ({e})")
 
 # ============================================
-# VERIFICATION CONFIGURATION
+# VERIFICATION CONFIGURATION (v2.0)
 # ============================================
 
 VERIFICATION_CONFIG = {
     'enabled': True,              # Enable/disable verification
+    'use_enhanced': True,         # Use enhanced v2.0 verification (if available)
     'check_email_format': True,   # Validate email format
-    'check_link_format': True,    # Validate URL format (website, linkedin, platform_link)
-    'check_accessibility': False, # Check link accessibility (requires Playwright MCP, slow)
-    'check_activity': False,      # Check project activity (requires Exa AI MCP, slow)
-    'remove_invalid': True        # Remove invalid projects from output
+    'check_email_mx': True,       # Check MX records (enhanced)
+    'check_disposable': True,     # Detect disposable emails (enhanced)
+    'check_email_exists': False,  # SMTP verification (slow, often blocked)
+    'check_link_format': True,    # Validate URL format
+    'check_accessibility': False, # Check link accessibility (requires async, slow)
+    'check_activity': False,      # Check project activity (requires Exa AI)
+    'remove_invalid': False,      # Keep all projects, mark invalid ones
+    'verification_level': 'standard',  # quick, standard, or full
+}
+
+# AI Email Generation Configuration
+EMAIL_CONFIG = {
+    'enabled': True,              # Enable AI email generation
+    'generate_for_priority': 30,  # Minimum priority score to generate emails
+    'output_format': 'markdown',  # markdown or html
+    'include_metadata': True,     # Include matching metadata in output
 }
 
 
@@ -526,18 +569,43 @@ def process_data():
     if VERIFICATION_AVAILABLE and VERIFICATION_CONFIG.get('enabled', False):
         print("\n[2.5/7] Verifying project data...")
         print(f"      Email format: {VERIFICATION_CONFIG.get('check_email_format', True)}")
+        print(f"      Email exists (SMTP): {VERIFICATION_CONFIG.get('check_email_exists', True)}")
         print(f"      Link format: {VERIFICATION_CONFIG.get('check_link_format', True)}")
 
         verified_projects = []
         invalid_count = 0
+        email_checked_count = 0
+        email_valid_count = 0
 
         for project in unique_projects:
-            # Run verification
+            # Run basic verification
             validated = verify_project_sync(
                 project,
                 check_accessibility=VERIFICATION_CONFIG.get('check_accessibility', False),
                 check_activity=VERIFICATION_CONFIG.get('check_activity', False)
             )
+
+            # SMTP email existence verification
+            if VERIFICATION_CONFIG.get('check_email_exists', True):
+                email = project.get('email')
+                if email:
+                    email_result = verify_email_exists_smtp(email)
+                    # Add to validation results
+                    validation_results = validated.get('validation_results', [])
+                    validation_results.append(email_result.to_dict())
+                    validated['validation_results'] = validation_results
+
+                    # Update validation notes
+                    if email_result.status.value != 'valid':
+                        notes = validated.get('validation_notes', [])
+                        notes.append(email_result.message)
+                        validated['validation_notes'] = notes
+                        validated['is_valid'] = False
+
+                    email_checked_count += 1
+                    if email_result.status.value == 'valid':
+                        email_valid_count += 1
+
             verified_projects.append(validated)
 
             if not validated.get('is_valid', True):
@@ -545,6 +613,8 @@ def process_data():
 
         print(f"      Validated {len(verified_projects)} projects")
         print(f"      Invalid projects: {invalid_count}")
+        print(f"      SMTP email checked: {email_checked_count}")
+        print(f"      Email exists: {email_valid_count}")
 
         # Filter invalid projects if configured
         if VERIFICATION_CONFIG.get('remove_invalid', True):
@@ -558,6 +628,7 @@ def process_data():
             p['is_valid'] = True
             p['validation_notes'] = None
             p['validated_at'] = None
+            p['validation_results'] = []
 
     # Sort by priority score
     unique_projects.sort(key=lambda x: x['priority_score'], reverse=True)
@@ -687,15 +758,19 @@ def extract_timeline(requirements: str) -> str:
     return ' '.join(timeline) if timeline else "协商确定"
 
 def save_to_csv(projects):
-    """Save projects to CSV file in date folder"""
+    """Save projects to CSV file in date folder with validation results"""
     csv_path = DATE_DIR / f"design_projects_{TODAY}.csv"
 
     fieldnames = [
-        '是否有效', '校验备注', '校验时间',
+        # 验证结果列
+        '是否有效', '完全验证通过', '网站可访问', '网站标题', '邮箱格式正确', '邮箱存在', '校验备注', '校验时间',
+        # 优先级列
         '优先级标签', '优先级分数', '数据来源',
+        # 项目信息列
         '项目标题', '客户名称', '客户类型', '客户行业',
         '预算(USD)', '预算范围', '项目需求描述',
         '项目状态', '需要做的工作', '交付物', '交付格式', '交付时间',
+        # 联系方式列
         '客户邮箱', 'LinkedIn主页', '公司网站', '平台链接',
         '历史项目数', '客户信誉评分', '联系方式'
     ]
@@ -703,17 +778,60 @@ def save_to_csv(projects):
     # Map project dict keys to Chinese column headers
     csv_rows = []
     for p in projects:
+        # Extract validation details
+        validation_results = p.get('validation_results', [])
+        email_valid = '是'  # 格式默认正确
+        email_exists = '未验证'
+        website_accessible = '未验证'
+        website_title = ''
+
+        for result in validation_results:
+            if isinstance(result, dict):
+                field = result.get('field', '')
+                status = result.get('status', '')
+                details = result.get('details', {})
+
+                if field == 'email' and status:
+                    email_valid = '是' if status == 'valid' else '否'
+                if field == 'email_exists':
+                    if status == 'valid':
+                        email_exists = '是'
+                    elif status == 'invalid':
+                        email_exists = '否'
+                    else:
+                        email_exists = '未知'
+                if field == 'website' and status:
+                    if status == 'valid':
+                        website_accessible = '是'
+                    elif status == 'invalid':
+                        website_accessible = '否'
+                    else:
+                        website_accessible = '未知'
+                    website_title = details.get('title', '') if details else ''
+
         # Format validation notes for CSV
         validation_notes = p.get('validation_notes', [])
         notes_str = '; '.join(validation_notes) if validation_notes else ''
 
         row = {
+            # 验证结果列
             '是否有效': '是' if p.get('is_valid', True) else '否',
+            '完全验证通过': '是' if (
+                p.get('is_valid', True) and
+                website_accessible == '是' and
+                email_exists == '是'
+            ) else '否',
+            '网站可访问': website_accessible,
+            '网站标题': website_title[:100] if website_title else '',
+            '邮箱格式正确': email_valid,
+            '邮箱存在': email_exists,
             '校验备注': notes_str,
             '校验时间': p.get('validated_at', '') or '',
+            # 优先级列
             '优先级标签': p.get('priority_label', ''),
             '优先级分数': p.get('priority_score', 0),
             '数据来源': p.get('platform', ''),
+            # 项目信息列
             '项目标题': p.get('title', ''),
             '客户名称': p.get('client', ''),
             '客户类型': p.get('client_type', ''),
@@ -726,6 +844,7 @@ def save_to_csv(projects):
             '交付物': p.get('交付物', '未明确说明'),
             '交付格式': p.get('交付格式', '未明确说明'),
             '交付时间': p.get('交付时间', '协商确定'),
+            # 联系方式列
             '客户邮箱': p.get('email', ''),
             'LinkedIn主页': p.get('linkedin', ''),
             '公司网站': p.get('website', ''),
@@ -1098,11 +1217,153 @@ def save_readme():
         f.write(readme_content)
     return readme_path
 
+
+def run_enhanced_verification(projects: list) -> list:
+    """Run enhanced verification using new modules"""
+    if not ENHANCED_MODULES_AVAILABLE:
+        print("      Enhanced modules not available, skipping")
+        return projects
+
+    # Create verification config based on settings
+    level_map = {
+        'quick': VerificationLevel.QUICK,
+        'standard': VerificationLevel.STANDARD,
+        'full': VerificationLevel.FULL
+    }
+    level = level_map.get(
+        VERIFICATION_CONFIG.get('verification_level', 'standard'),
+        VerificationLevel.STANDARD
+    )
+
+    config = VerificationConfig(
+        level=level,
+        email_check_format=VERIFICATION_CONFIG.get('check_email_format', True),
+        email_check_mx=VERIFICATION_CONFIG.get('check_email_mx', True),
+        email_check_disposable=VERIFICATION_CONFIG.get('check_disposable', True),
+        email_check_smtp=VERIFICATION_CONFIG.get('check_email_exists', False),
+        url_check_format=VERIFICATION_CONFIG.get('check_link_format', True),
+        url_check_accessibility=VERIFICATION_CONFIG.get('check_accessibility', False),
+    )
+
+    verifier = RealtimeVerifier(config)
+
+    # Progress callback
+    def progress(current, total):
+        print(f"      Verifying: [{current}/{total}]", end='\r')
+
+    # Run verification
+    results = verifier.verify_batch_sync(projects, progress_callback=progress)
+    print()  # New line after progress
+
+    # Apply verification results
+    verified_projects = []
+    valid_count = 0
+    invalid_count = 0
+
+    for project, result in zip(projects, results):
+        enhanced = apply_verification_to_project(project, result)
+        verified_projects.append(enhanced)
+        if result.is_valid:
+            valid_count += 1
+        else:
+            invalid_count += 1
+
+    print(f"      Valid: {valid_count}, Invalid: {invalid_count}")
+
+    # Filter if configured
+    if VERIFICATION_CONFIG.get('remove_invalid', False):
+        valid_projects, _ = filter_valid_projects(projects, results)
+        print(f"      Filtered to {len(valid_projects)} valid projects")
+        return valid_projects
+
+    return verified_projects
+
+
+def generate_personalized_emails(projects: list, user_profile: dict) -> int:
+    """Generate AI personalized emails using enhanced modules"""
+    if not ENHANCED_MODULES_AVAILABLE:
+        print("      Enhanced modules not available, using templates")
+        return generate_marketing_emails(projects)
+
+    # Create output directories
+    ai_email_dir = DATE_DIR / "marketing_emails" / "ai_generated"
+    ai_email_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = PersonalizedEmailGenerator(user_profile)
+    email_count = 0
+
+    min_priority = EMAIL_CONFIG.get('generate_for_priority', 30)
+
+    for i, project in enumerate(projects, 1):
+        score = project.get('priority_score', 0)
+        if score < min_priority:
+            continue
+
+        # Skip projects without contact info
+        if not (project.get('email') or project.get('linkedin')):
+            continue
+
+        try:
+            email = generator.generate(project)
+
+            # Determine subfolder based on priority
+            if score >= 50:
+                folder = ai_email_dir / "high_priority"
+            else:
+                folder = ai_email_dir / "medium_priority"
+            folder.mkdir(parents=True, exist_ok=True)
+
+            # Save email
+            safe_client = "".join(
+                c if c.isalnum() else "_"
+                for c in project.get('client', f'client{i}')
+            )[:20]
+            filename = f"project_{i:03d}_{safe_client}_email.md"
+
+            save_email_to_file(email, folder, filename)
+            email_count += 1
+
+        except Exception as e:
+            print(f"      Warning: Failed to generate email for {project.get('client')}: {e}")
+            continue
+
+    return email_count
+
+
 def main():
+    """Main processing function with CLI argument support"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Design Project Finder - Process and generate personalized emails'
+    )
+    parser.add_argument('--realtime-verify', action='store_true',
+                       help='Enable real-time verification with enhanced modules')
+    parser.add_argument('--generate-emails', action='store_true',
+                       help='Generate AI personalized emails')
+    parser.add_argument('--full', action='store_true',
+                       help='Enable both verification and email generation')
+    parser.add_argument('--verification-level', choices=['quick', 'standard', 'full'],
+                       default='standard', help='Verification level')
+
+    args = parser.parse_args()
+
+    # Apply CLI arguments to config
+    if args.full:
+        args.realtime_verify = True
+        args.generate_emails = True
+
+    VERIFICATION_CONFIG['verification_level'] = args.verification_level
+
     print("=" * 60)
-    print("Design Project Finder - Data Processing")
+    print("Design Project Finder - Data Processing (v2.0)")
     print("=" * 60)
     print(f"\n📁 Output folder: output/{TODAY}/")
+
+    # Show enabled features
+    if args.realtime_verify and ENHANCED_MODULES_AVAILABLE:
+        print("   ✓ Real-time verification enabled")
+    if args.generate_emails and ENHANCED_MODULES_AVAILABLE:
+        print("   ✓ AI email generation enabled")
 
     # Load user profile for personalized matching
     print("\n[0/7] Loading user profile...")
@@ -1119,6 +1380,11 @@ def main():
     projects = process_data()
     print(f"      Found {len(projects)} unique projects")
 
+    # Enhanced verification (if enabled and available)
+    if args.realtime_verify and ENHANCED_MODULES_AVAILABLE:
+        print("\n[2.5/7] Running enhanced real-time verification...")
+        projects = run_enhanced_verification(projects)
+
     # Save CSV
     print("\n[3/7] Saving to CSV files...")
     csv_path = save_to_csv(projects)
@@ -1127,10 +1393,16 @@ def main():
     contact_path = save_contact_list(projects)
     print(f"      Saved: {contact_path.relative_to(OUTPUT_DIR)}")
 
-    # Generate marketing emails (template-based)
-    print("\n[4/7] Generating template marketing emails...")
-    email_count = generate_marketing_emails(projects)
-    print(f"      Generated {email_count} template emails")
+    # Generate marketing emails
+    print("\n[4/7] Generating marketing emails...")
+    if args.generate_emails and ENHANCED_MODULES_AVAILABLE:
+        # Use enhanced AI email generator
+        email_count = generate_personalized_emails(projects, user_profile)
+        print(f"      Generated {email_count} AI personalized emails")
+    else:
+        # Use template-based generation
+        email_count = generate_marketing_emails(projects)
+        print(f"      Generated {email_count} template emails")
 
     # Save JSON for AI-powered email generation (with match scores)
     print("\n[5/7] Saving JSON for AI email generation...")
@@ -1152,12 +1424,14 @@ def main():
     # Statistics
     high_prio = sum(1 for p in projects if p.get('priority_score', 0) >= 50)
     with_email = sum(1 for p in projects if p.get('email'))
+    valid_count = sum(1 for p in projects if p.get('is_valid', True))
 
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
     print(f"User profile:      {user_name}")
     print(f"Total projects:    {len(projects)}")
+    print(f"Valid projects:    {valid_count}")
     print(f"High priority:     {high_prio}")
     print(f"High match:        {high_match_count} (based on your expertise)")
     print(f"With email:        {with_email}")
