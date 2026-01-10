@@ -1,0 +1,209 @@
+# Design Job Finder - User Profile Configuration
+# This file stores user background information for personalized job matching and email generation
+
+# ============================================
+# BASIC INFORMATION
+# ============================================
+name: "黄蓉"
+name_en: "Huang Rong"
+email: "hueshadow989@gmail.com"
+website: "https://hueshadow.com"
+phone: "15295793607"
+
+# ============================================
+# PROFESSIONAL IDENTITY
+# ============================================
+role: "资深UX设计师 / 产品经理"
+role_en: "Senior UX Designer / Product Manager"
+years_experience: 10
+education: "宁波大学 - 艺术设计（环境艺术设计）本科"
+
+# ============================================
+# CORE EXPERTISE (for matching)
+# ============================================
+core_expertise:
+  - "B2B/SaaS 产品设计"
+  - "数据分析平台 UX"
+  - "企业级管理后台"
+  - "设计系统 & 组件库"
+  - "多平台设计（Web/Mobile/鸿蒙）"
+  - "产品经理经验"
+
+# Keywords for project matching (case-insensitive)
+expertise_keywords:
+  high_match:  # 30 points
+    - "dashboard"
+    - "analytics"
+    - "data visualization"
+    - "admin"
+    - "console"
+    - "b2b"
+    - "saas"
+    - "enterprise"
+    - "management"
+    - "platform"
+  medium_match:  # 15 points
+    - "ui/ux"
+    - "design system"
+    - "component"
+    - "mobile app"
+    - "web design"
+    - "fintech"
+    - "healthcare"
+
+# ============================================
+# HIGHLIGHT PROJECTS (for email personalization)
+# ============================================
+highlight_projects:
+  - name: "HUAWEI Analytics"
+    name_cn: "华为分析"
+    benchmark: "Google Analytics"
+    result: "全球接入 21,000+ 应用，海外 15,520+ 应用"
+    result_en: "21,000+ apps integrated globally, 15,520+ overseas"
+    keywords:
+      - analytics
+      - data
+      - dashboard
+      - tracking
+
+  - name: "Business Connect"
+    benchmark: "Google My Business"
+    result: "接入商家 594 万，CP 110 家"
+    result_en: "5.94 million merchants, 110 content providers"
+    keywords:
+      - merchant
+      - local
+      - business
+      - commerce
+
+  - name: "华为云费用中心"
+    name_en: "Huawei Cloud Billing Center"
+    result: "企业级云服务费用管理系统"
+    keywords:
+      - cloud
+      - billing
+      - enterprise
+      - fintech
+
+  - name: "鸿蒙元服务管理台"
+    name_en: "HarmonyOS Service Management Console"
+    result: "开发者后台管理系统"
+    keywords:
+      - developer
+      - console
+      - admin
+      - platform
+
+  - name: "火柴盒 App"
+    name_en: "Matchbox App"
+    result: "App Store 热推前七，最美应用推荐，完成天使轮融资"
+    result_en: "Top 7 on App Store, featured by 'Best Apps', angel round funded"
+    keywords:
+      - mobile
+      - consumer
+      - startup
+
+# ============================================
+# PREFERRED INDUSTRIES (for matching)
+# ============================================
+preferred_industries:
+  high_priority:  # 30 points
+    - "SaaS"
+    - "B2B"
+    - "Data Analytics"
+    - "FinTech"
+    - "Enterprise Software"
+    - "Cloud Services"
+  medium_priority:  # 15 points
+    - "HealthTech"
+    - "E-commerce"
+    - "EdTech"
+    - "AI"
+    - "Developer Tools"
+
+# ============================================
+# PREFERRED CLIENT TYPES (for matching)
+# ============================================
+preferred_client_types:
+  high_priority:  # 20 points
+    - "Enterprise"
+    - "SME"
+  medium_priority:  # 10 points
+    - "Startup"
+    - "SMB"
+
+# ============================================
+# WORK PREFERENCES
+# ============================================
+work_preference:
+  locations:
+    - "Remote"
+    - "苏州"
+    - "上海"
+  accepts_remote: true
+  salary_range:
+    min: 25000
+    max: 40000
+    currency: "CNY"
+  accepts_usdt: true
+  accepts_project_based: true
+
+# ============================================
+# SKILLS FOR EMAIL CONTENT
+# ============================================
+skills:
+  design_tools:
+    - "Figma"
+    - "Sketch"
+    - "Pixso"
+    - "Adobe XD"
+    - "Axure"
+  prototyping:
+    - "High-fidelity prototypes"
+    - "Interactive prototypes"
+    - "Design systems"
+  ai_tools:
+    - "Midjourney"
+    - "Stable Diffusion"
+  3d_tools:
+    - "C4D"
+    - "Blender"
+
+# ============================================
+# EMAIL GENERATION TEMPLATES
+# ============================================
+email_templates:
+  # Template for Analytics/Dashboard projects
+  analytics_opener: |
+    During my 6 years at Huawei, I led the UX design for HUAWEI Analytics—
+    a platform benchmarked against Google Analytics that now serves 21,000+
+    apps globally. Your {project_title} aligns closely with my expertise.
+
+  # Template for B2B/Enterprise projects
+  b2b_opener: |
+    I've spent the past 6 years specializing in enterprise B2B product design,
+    including Huawei Cloud Billing Center and HarmonyOS developer consoles.
+    Complex system architecture and user flow optimization are my strengths.
+
+  # Template for Merchant/Local Business projects
+  merchant_opener: |
+    I led the design for Business Connect (Huawei's answer to Google My Business),
+    which now serves 5.94 million merchants. Your project resonates strongly
+    with my experience in merchant-facing platforms.
+
+  # Default professional opener
+  default_opener: |
+    With 10+ years in UX design and product management, including 6 years
+    at Huawei working on enterprise-scale platforms, I bring deep expertise
+    in complex system design and user-centered product development.
+
+# ============================================
+# SIGNATURE FOR EMAILS
+# ============================================
+email_signature: |
+  Best regards,
+  Rong Huang (黄蓉)
+  Senior UX Designer | Product Manager
+
+  Portfolio: https://hueshadow.com
+  Email: hueshadow989@gmail.com
