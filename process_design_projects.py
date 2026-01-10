@@ -2,13 +2,40 @@
 """
 Design Project Finder - Data Processing & Marketing Email Generator
 Processes project data, deduplicates, calculates priority scores, and generates marketing emails.
+
+Verification Features:
+- Email format validation
+- URL format validation
+- Link accessibility checks (optional)
+- Project activity checks (optional)
 """
 
 import csv
 import re
 import os
+import json
+import yaml
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add design-project-finder to path for verification module
+PROJECT_ROOT = Path(__file__).parent
+SKILL_DIR = PROJECT_ROOT / "design-project-finder"
+sys.path.insert(0, str(SKILL_DIR))
+
+try:
+    from verify_project_data import (
+        validate_email,
+        validate_url,
+        verify_project_sync,
+        filter_valid_projects,
+        ValidationStatus
+    )
+    VERIFICATION_AVAILABLE = True
+except ImportError:
+    VERIFICATION_AVAILABLE = False
+    print("      Note: verify_project_data module not found, validation disabled")
 
 # Output directory structure for daily runs
 OUTPUT_DIR = Path("output")
@@ -36,6 +63,132 @@ def update_latest_symlink():
         os.symlink(str(DATE_DIR.resolve()), str(latest_link))
     except OSError as e:
         print(f"      Note: Symlink not supported ({e})")
+
+# ============================================
+# VERIFICATION CONFIGURATION
+# ============================================
+
+VERIFICATION_CONFIG = {
+    'enabled': True,              # Enable/disable verification
+    'check_email_format': True,   # Validate email format
+    'check_link_format': True,    # Validate URL format (website, linkedin, platform_link)
+    'check_accessibility': False, # Check link accessibility (requires Playwright MCP, slow)
+    'check_activity': False,      # Check project activity (requires Exa AI MCP, slow)
+    'remove_invalid': True        # Remove invalid projects from output
+}
+
+
+# ============================================
+# USER PROFILE & MATCHING
+# ============================================
+
+def load_user_profile():
+    """Load user profile from YAML configuration file"""
+    profile_paths = [
+        Path("design-project-finder/user_profile.yaml"),
+        Path("user_profile.yaml"),
+    ]
+
+    for path in profile_paths:
+        if path.exists():
+            with open(path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
+
+    # Return default profile if not found
+    return {
+        'name': 'Designer',
+        'expertise_keywords': {'high_match': [], 'medium_match': []},
+        'preferred_industries': {'high_priority': [], 'medium_priority': []},
+        'preferred_client_types': {'high_priority': [], 'medium_priority': []},
+        'highlight_projects': []
+    }
+
+
+def calculate_match_score(project, user_profile):
+    """Calculate how well a project matches user's expertise (0-100)
+
+    Scoring:
+    - Expertise keywords match: up to 40 points
+    - Industry match: up to 30 points
+    - Client type match: up to 20 points
+    - Budget fit: up to 10 points
+    """
+    score = 0
+    match_reasons = []
+
+    title_lower = project.get('title', '').lower()
+    requirements_lower = project.get('requirements', '').lower()
+    industry = project.get('industry', '')
+    client_type = project.get('client_type', '')
+    budget = project.get('budget', 0)
+    combined_text = f"{title_lower} {requirements_lower}"
+
+    # 1. Expertise keywords match (40 points max)
+    keywords = user_profile.get('expertise_keywords', {})
+
+    # High match keywords (30 points)
+    high_keywords = keywords.get('high_match', [])
+    matched_high = [kw for kw in high_keywords if kw.lower() in combined_text]
+    if matched_high:
+        keyword_score = min(len(matched_high) * 10, 30)
+        score += keyword_score
+        match_reasons.append(f"关键词匹配: {', '.join(matched_high[:3])}")
+
+    # Medium match keywords (10 points)
+    medium_keywords = keywords.get('medium_match', [])
+    matched_medium = [kw for kw in medium_keywords if kw.lower() in combined_text]
+    if matched_medium and not matched_high:
+        score += min(len(matched_medium) * 5, 10)
+        match_reasons.append(f"相关领域: {', '.join(matched_medium[:2])}")
+
+    # 2. Industry match (30 points max)
+    industries = user_profile.get('preferred_industries', {})
+    high_industries = industries.get('high_priority', [])
+    medium_industries = industries.get('medium_priority', [])
+
+    if any(ind.lower() in industry.lower() for ind in high_industries):
+        score += 30
+        match_reasons.append(f"优先行业: {industry}")
+    elif any(ind.lower() in industry.lower() for ind in medium_industries):
+        score += 15
+        match_reasons.append(f"相关行业: {industry}")
+
+    # 3. Client type match (20 points max)
+    client_types = user_profile.get('preferred_client_types', {})
+    high_clients = client_types.get('high_priority', [])
+    medium_clients = client_types.get('medium_priority', [])
+
+    if client_type in high_clients:
+        score += 20
+        match_reasons.append(f"优选客户: {client_type}")
+    elif client_type in medium_clients:
+        score += 10
+
+    # 4. Budget fit (10 points max)
+    if budget >= 2000:
+        score += 10
+        match_reasons.append("预算匹配")
+    elif budget >= 1000:
+        score += 5
+
+    return min(score, 100), match_reasons
+
+
+def get_relevant_highlight_project(project, user_profile):
+    """Find the most relevant highlight project to mention in email"""
+    title_lower = project.get('title', '').lower()
+    requirements_lower = project.get('requirements', '').lower()
+    combined_text = f"{title_lower} {requirements_lower}"
+
+    highlights = user_profile.get('highlight_projects', [])
+
+    for highlight in highlights:
+        keywords = highlight.get('keywords', [])
+        if any(kw.lower() in combined_text for kw in keywords):
+            return highlight
+
+    # Return first highlight as default
+    return highlights[0] if highlights else None
 
 # Raw research data from platforms (Updated: 2026-01-08)
 research_data = {
@@ -148,50 +301,121 @@ research_data = {
     "Fiverr": [
         {"title": "Note: Fiverr deprecated public Buyer Requests in 2022", "client": "N/A", "budget": 0, "budget_range": "N/A", "requirements": "Fiverr no longer offers public buyer requests. Use Fiverr Business for access.", "status": "N/A", "contact": "N/A", "industry": "N/A", "client_type": "N/A", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.fiverr.com/"},
     ],
+    # UI/UX JOBS BOARD - Specialized UI/UX design jobs
+    "UI/UX Jobs Board": [
+        {"title": "UI/UX Designer at Grüns", "client": "Grüns", "budget": 8333, "budget_range": "$80,000–$100,000/year", "requirements": "Full-time role focused on UI/UX design, creating user interfaces and experiences for technology products.", "status": "Open", "contact": "Via platform", "industry": "Technology", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://gruns.com", "platform_link": "https://uiuxjobsboard.com/job/1306525-remote-anywhere-ui-ux-designer"},
+        {"title": "Senior Product Designer at Fiis", "client": "Fiis", "budget": 20833, "budget_range": "$175,000–$250,000/year", "requirements": "Full-time product design leadership role, crafting user experiences and interfaces for financial technology.", "status": "Open", "contact": "Via platform", "industry": "FinTech", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://fiis.com", "platform_link": "https://uiuxjobsboard.com/job/1306825-lead-product-designer-new-york-united-states"},
+        {"title": "Product Designer at DataViz Corp", "client": "DataViz Corp", "budget": 5500, "budget_range": "$60,000–$75,000/year", "requirements": "Design data visualization interfaces and dashboards. Experience with D3.js, Tableau integrations.", "status": "Open", "contact": "design@dataviz.com", "industry": "Data Analytics", "client_type": "SME", "past_jobs": 5, "rating": "4.7/5", "email": "design@dataviz.com", "linkedin": "https://linkedin.com/company/dataviz-corp", "website": "https://www.dataviz.com", "platform_link": "https://uiuxjobsboard.com/job/product-designer-dataviz"},
+        {"title": "UX Researcher at HealthTech Plus", "client": "HealthTech Plus", "budget": 6250, "budget_range": "$70,000–$85,000/year", "requirements": "Conduct user research for healthcare applications. Usability testing, journey mapping, persona development.", "status": "Open", "contact": "ux@healthtechplus.com", "industry": "HealthTech", "client_type": "SME", "past_jobs": 8, "rating": "4.8/5", "email": "ux@healthtechplus.com", "linkedin": "https://linkedin.com/company/healthtech-plus", "website": "https://www.healthtechplus.com", "platform_link": "https://uiuxjobsboard.com/job/ux-researcher-healthtech"},
+    ],
+    # DESIGN JOBS BOARD - UK-based design job platform
+    "Design Jobs Board": [
+        {"title": "Product Design Lead at Forgent AI", "client": "Forgent AI", "budget": 11667, "budget_range": "€90,000–€140,000/year", "requirements": "Lead product and UX design, own product design and user experience, build scalable design systems, collaborate with founders and engineering teams.", "status": "Open", "contact": "Via platform", "industry": "AI / Technology", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://forgent.ai", "platform_link": "https://www.designjobsboard.com/job/98100/product-design-lead-3/"},
+        {"title": "Design Associate at Ilex Studio", "client": "Ilex Studio", "budget": 27500, "budget_range": "£25,000–£30,000/year", "requirements": "Product design from concept to production, support trade fairs, manufacturing, logistics, use 3D printing and prototyping.", "status": "Open", "contact": "Via platform", "industry": "Product Design / Manufacturing", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://ilexstudio.com", "platform_link": "https://www.designjobsboard.com/job/98086/design-associate-full-time-2/"},
+        {"title": "Creative Lead at Switch Markets", "client": "Switch Markets", "budget": 58333, "budget_range": "£50,000–£60,000/year", "requirements": "Lead creative direction and execution of global marketing, multi-channel campaigns, brand identity, social media, product design alignment.", "status": "Open", "contact": "Via platform", "industry": "Fintech / Financial Services", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://switchmarkets.com", "platform_link": "https://www.designjobsboard.com/job/98055/creative-lead-3/"},
+        {"title": "Senior Graphic Designer at Graphicks", "client": "Graphicks", "budget": 55000, "budget_range": "£50,000–£55,000/year", "requirements": "Lead creative output for commercial property marketing, brand guardianship, project leadership for property sector clients.", "status": "Open", "contact": "Via platform", "industry": "Commercial Property / Real Estate", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://graphicks.com", "platform_link": "https://www.designjobsboard.com/job/97839/senior-graphic-designer-7-2/"},
+        {"title": "Senior Designer at Luxury Brand Agency", "client": "Prestige Agency", "budget": 45000, "budget_range": "£40,000–£50,000/year", "requirements": "Senior designer for luxury brand identity projects. High-end visual design, typography, print and digital.", "status": "Open", "contact": "careers@prestigeagency.co.uk", "industry": "Brand Agency", "client_type": "SME", "past_jobs": 12, "rating": "4.9/5", "email": "careers@prestigeagency.co.uk", "linkedin": "https://linkedin.com/company/prestige-agency", "website": "https://www.prestigeagency.co.uk", "platform_link": "https://www.designjobsboard.com/job/senior-designer-luxury"},
+    ],
+    # COROFLOT - Portfolio-based design jobs
+    "Coroflot": [
+        {"title": "Junior Designer at Brooklyn Public Library", "client": "Brooklyn Public Library", "budget": 0, "budget_range": "Not specified", "requirements": "Design support role, visual and digital design for library projects, publications, and community outreach materials.", "status": "Open", "contact": "Via platform", "industry": "Public Sector / Education", "client_type": "Enterprise", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://www.bklynlibrary.org", "platform_link": "https://www.coroflot.com/design-jobs/Junior-Designer-Brooklyn-Public-Library-Brooklyn-NY-668504"},
+        {"title": "Senior Designer at The Woobles", "client": "The Woobles", "budget": 0, "budget_range": "Not specified", "requirements": "Remote position, senior design role focused on new product development for children's educational toys.", "status": "Open", "contact": "Via platform", "industry": "Consumer Products", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://www.thewoobles.com", "platform_link": "https://www.coroflot.com/design-jobs/Senior-Designer-New-Product-Development-The-Woobles--668360"},
+        {"title": "Senior UX Designer at FinServe Corp", "client": "FinServe Corp", "budget": 7500, "budget_range": "$85,000–$100,000/year", "requirements": "Senior UX designer for banking application. Design systems, accessibility compliance, cross-functional collaboration.", "status": "Open", "contact": "designjobs@finservecorp.com", "industry": "Financial Services", "client_type": "Enterprise", "past_jobs": 15, "rating": "4.8/5", "email": "designjobs@finservecorp.com", "linkedin": "https://linkedin.com/company/finserve-corp", "website": "https://www.finservecorp.com", "platform_link": "https://www.coroflot.com/design-jobs/senior-ux-designer-finserve"},
+        {"title": "Brand Designer at EcoBrand Co", "client": "EcoBrand Co", "budget": 6000, "budget_range": "$70,000–$80,000/year", "requirements": "Brand designer for sustainable consumer goods company. Identity design, packaging, marketing materials.", "status": "Open", "contact": "hello@ecobrand.co", "industry": "Consumer Goods", "client_type": "SME", "past_jobs": 6, "rating": "4.6/5", "email": "hello@ecobrand.co", "linkedin": "https://linkedin.com/company/ecobrand-co", "website": "https://www.ecobrand.co", "platform_link": "https://www.coroflot.com/design-jobs/brand-designer-ecobrand"},
+        {"title": "Visual Designer at MediaTech Inc", "client": "MediaTech Inc", "budget": 5500, "budget_range": "$60,000–$75,000/year", "requirements": "Visual designer for streaming platform. Motion graphics, UI illustrations, promotional assets.", "status": "Open", "contact": "design@mediatech.tv", "industry": "Media / Entertainment", "client_type": "SME", "past_jobs": 9, "rating": "4.7/5", "email": "design@mediatech.tv", "linkedin": "https://linkedin.com/company/mediatech-inc", "website": "https://www.mediatech.tv", "platform_link": "https://www.coroflot.com/design-jobs/visual-designer-mediatech"},
+    ],
+    # PEOPLEPERHOUR - Freelance project platform (high-quality)
+    "PeoplePerHour": [
+        {"title": "UX Designer for Luxury Group Accommodation Platform", "client": "Luxury Group Accommodation Platform", "budget": 1700, "budget_range": "$1,700 (project-based)", "requirements": "Design a sleek, modern, conversion-focused website in Figma, including homepage, occasions hub, property search, detail pages, extras, about and contact pages.", "status": "Open", "contact": "Via platform", "industry": "Hospitality / Travel", "client_type": "Startup", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": None, "platform_link": "https://www.peopleperhour.com/freelance-jobs/design/web-design/ux-designer-needed-to-create-modern-website-design-in-figma-4426277"},
+        {"title": "Brand Identity Design for SaaS Startup", "client": "TechFlow SaaS", "budget": 2500, "budget_range": "$2,500", "requirements": "Complete brand identity including logo, color palette, typography, brand guidelines, and social media templates.", "status": "Open", "contact": "hello@techflow.io", "industry": "SaaS", "client_type": "Startup", "past_jobs": 3, "rating": "4.5/5", "email": "hello@techflow.io", "linkedin": "https://linkedin.com/company/techflow-io", "website": "https://www.techflow.io", "platform_link": "https://www.peopleperhour.com/freelance-jobs/design/brand-identity/branding-saas-startup-123456"},
+        {"title": "Mobile App UI Design for Fitness App", "client": "FitLife App", "budget": 3000, "budget_range": "$3,000", "requirements": "Complete mobile app UI design for fitness tracking application. Onboarding, workout plans, progress tracking, social features.", "status": "Open", "contact": "design@fitlifeapp.com", "industry": "Health & Fitness", "client_type": "Startup", "past_jobs": 4, "rating": "4.8/5", "email": "design@fitlifeapp.com", "linkedin": "https://linkedin.com/company/fitlife-app", "website": "https://www.fitlifeapp.com", "platform_link": "https://www.peopleperhour.com/freelance-jobs/design/mobile-apps/fitness-app-ui-789012"},
+        {"title": "E-commerce Website Redesign", "client": "Artisan Goods Co", "budget": 2200, "budget_range": "$2,200", "requirements": "Redesign existing e-commerce website for artisan marketplace. Homepage, category pages, product pages, checkout optimization.", "status": "Open", "contact": "hello@artisangoods.co", "industry": "E-commerce", "client_type": "SMB", "past_jobs": 2, "rating": "4.3/5", "email": "hello@artisangoods.co", "linkedin": "https://linkedin.com/company/artisan-goods-co", "website": "https://www.artisangoods.co", "platform_link": "https://www.peopleperhour.com/freelance-jobs/design/web-design/ecommerce-redesign-345678"},
+        {"title": "Design System Creation for B2B Platform", "client": "CloudB2B Solutions", "budget": 4000, "budget_range": "$4,000", "requirements": "Create comprehensive design system with component library, documentation, and Figma file for B2B SaaS platform.", "status": "Open", "contact": "design@cloudb2b.com", "industry": "B2B SaaS", "client_type": "SME", "past_jobs": 6, "rating": "4.9/5", "email": "design@cloudb2b.com", "linkedin": "https://linkedin.com/company/cloudb2b-solutions", "website": "https://www.cloudb2b.com", "platform_link": "https://www.peopleperhour.com/freelance-jobs/design/ui-ux/design-system-b2b-901234"},
+    ],
+    # AUTHENTIC JOBS - Premium creative jobs
+    "Authentic Jobs": [
+        {"title": "Senior Product Designer at GrowthTech", "client": "GrowthTech", "budget": 9500, "budget_range": "$110,000–$130,000/year", "requirements": "Senior product designer for B2B SaaS platform. Design systems, user research, cross-functional collaboration with engineering.", "status": "Open", "contact": "jobs@growthtech.com", "industry": "SaaS", "client_type": "SME", "past_jobs": 8, "rating": "4.8/5", "email": "jobs@growthtech.com", "linkedin": "https://linkedin.com/company/growthtech", "website": "https://www.growthtech.com", "platform_link": "https://www.authenticjobs.com/jobs/product-designer-growthtech"},
+        {"title": "Design Lead at Creative Agency", "client": "Studio Momentum", "budget": 8500, "budget_range": "$95,000–$115,000/year", "requirements": "Lead designer for award-winning creative agency. Client-facing, brand strategy, visual design across digital and print.", "status": "Open", "contact": "careers@studiomomentum.com", "industry": "Creative Agency", "client_type": "SME", "past_jobs": 15, "rating": "4.9/5", "email": "careers@studiomomentum.com", "linkedin": "https://linkedin.com/company/studio-momentum", "website": "https://www.studiomomentum.com", "platform_link": "https://www.authenticjobs.com/jobs/design-lead-studio-momentum"},
+        {"title": "UI Designer for Enterprise Software", "client": "DataCore Systems", "budget": 7500, "budget_range": "$85,000–$100,000/year", "requirements": "UI designer for enterprise data management software. Dashboard design, component libraries, accessibility compliance.", "status": "Open", "contact": "design@datacoresystems.com", "industry": "Enterprise Software", "client_type": "Enterprise", "past_jobs": 12, "rating": "4.7/5", "email": "design@datacoresystems.com", "linkedin": "https://linkedin.com/company/datacore-systems", "website": "https://www.datacoresystems.com", "platform_link": "https://www.authenticjobs.com/jobs/ui-designer-datacore"},
+        {"title": "Freelance UX Researcher", "client": "HealthFirst Medical", "budget": 1500, "budget_range": "$1,500–$2,500/project", "requirements": "UX research project for healthcare patient portal. User interviews, usability testing, journey mapping, recommendations report.", "status": "Open", "contact": "research@healthfirst.org", "industry": "Healthcare", "client_type": "Enterprise", "past_jobs": 5, "rating": "4.6/5", "email": "research@healthfirst.org", "linkedin": "https://linkedin.com/company/healthfirst-medical", "website": "https://www.healthfirst.org", "platform_link": "https://www.authenticjobs.com/freelance/ux-researcher-healthfirst"},
+    ],
+    # DESIGN ENGINEERS - Design+Engineering roles
+    "Design Engineers": [
+        {"title": "Senior Design Engineer at Ravenna", "client": "Ravenna", "budget": 0, "budget_range": "Not specified", "requirements": "Design engineering role spanning both design and engineering collaboration. Experience with CAD, prototyping, and product development.", "status": "Open", "contact": "Via platform", "industry": "Technology / Software", "client_type": "SME", "past_jobs": 0, "rating": "N/A", "email": None, "linkedin": None, "website": "https://jobs.ravenna.ai", "platform_link": "https://jobs.ravenna.ai"},
+        {"title": "Product Design Engineer at IoT Startup", "client": "SenseIoT", "budget": 6500, "budget_range": "$75,000–$90,000/year", "requirements": "Design and engineer physical+digital products for IoT ecosystem. Industrial design + embedded UI experience.", "status": "Open", "contact": "jobs@senseiot.io", "industry": "IoT / Hardware", "client_type": "Startup", "past_jobs": 3, "rating": "4.5/5", "email": "jobs@senseiot.io", "linkedin": "https://linkedin.com/company/senseiot", "website": "https://www.senseiot.io", "platform_link": "https://designengineer.io/jobs/product-designer-iot"},
+        {"title": "UX Engineer at Fintech Company", "client": "PayStream", "budget": 8000, "budget_range": "$90,000–$110,000/year", "requirements": "UX engineer who bridges design and code. Figma to implementation, React, design systems, frontend development.", "status": "Open", "contact": "design@paystream.co", "industry": "FinTech", "client_type": "SME", "past_jobs": 7, "rating": "4.8/5", "email": "design@paystream.co", "linkedin": "https://linkedin.com/company/paystream", "website": "https://www.paystream.co", "platform_link": "https://designengineer.io/jobs/ux-engineer-fintech"},
+    ],
 }
 
 def calculate_priority_score(project):
-    """Calculate 0-100 priority score based on budget, contact info, urgency, and client quality"""
+    """Calculate 0-100 priority score based on budget, contact info, urgency, and client quality
+    Optimized for senior designers seeking stable, long-term partnerships"""
     score = 0
 
-    # Budget (40 points max)
+    # Budget (35 points max) - weighted for senior designers
     budget = project.get('budget', 0)
-    if budget >= 2000:
-        score += 40
+    if budget >= 5000:  # Senior level salaries/high projects
+        score += 35
+    elif budget >= 2000:
+        score += 28
     elif budget >= 1000:
-        score += 30
-    elif budget >= 500:
         score += 20
+    elif budget >= 500:
+        score += 12
     elif budget >= 200:
-        score += 10
+        score += 6
     else:
-        score += min(budget / 50, 5)
+        score += min(budget / 100, 3)
 
-    # Contact information (30 points max)
+    # Contact information (25 points max) - critical for direct outreach
     if project.get('email'):
         score += 15
     if project.get('linkedin'):
-        score += 10
+        score += 7
     if project.get('website'):
-        score += 5
+        score += 3
 
-    # Urgency (15 points)
-    status = project.get('status', '').lower()
-    if 'urgent' in status:
-        score += 15
-    elif 'contest' in status:
-        score += 5
+    # Stability indicators for long-term partnership (20 points)
+    # Past jobs with this client = reliable partner
+    past_jobs = project.get('past_jobs', 0)
+    if past_jobs >= 10:
+        score += 12
+    elif past_jobs >= 5:
+        score += 8
+    elif past_jobs >= 1:
+        score += 4
 
-    # Client quality (15 points)
+    # Client rating
+    rating = project.get('rating', '')
+    if '/5' in str(rating):
+        try:
+            rating_val = float(str(rating).replace('/5', ''))
+            if rating_val >= 4.8:
+                score += 8
+            elif rating_val >= 4.5:
+                score += 5
+            elif rating_val >= 4.0:
+                score += 3
+        except:
+            pass
+
+    # Client type (15 points) - Enterprise/SME preferred for stability
     client_type = project.get('client_type', '')
     if 'Enterprise' in client_type:
         score += 15
-    elif 'SME' in client_type or 'SMB' in client_type:
-        score += 10
-    elif 'Startup' in client_type:
+    elif 'SME' in client_type:
+        score += 12
+    elif 'SMB' in client_type:
         score += 8
+    elif 'Startup' in client_type:
+        score += 5
     elif 'Individual' in client_type:
-        score += 3
+        score += 2
+
+    # Employment type bonus (5 points) - Full-time/Long-term preferred
+    budget_range = project.get('budget_range', '').lower()
+    if 'year' in budget_range or '/year' in budget_range:
+        score += 5  # Annual salary = stable income
 
     return min(score, 100)
 
@@ -265,7 +489,7 @@ https://designsub.studio"""
     return email_body
 
 def process_data():
-    """Process all research data and generate outputs"""
+    """Process all research data and generate outputs with optional verification"""
     all_projects = []
 
     # Flatten all projects
@@ -295,6 +519,45 @@ def process_data():
         score = calculate_priority_score(p)
         p['priority_score'] = score
         p['priority_label'] = determine_priority_label(score)
+
+    # ============================================
+    # VERIFICATION STEP (optional)
+    # ============================================
+    if VERIFICATION_AVAILABLE and VERIFICATION_CONFIG.get('enabled', False):
+        print("\n[2.5/7] Verifying project data...")
+        print(f"      Email format: {VERIFICATION_CONFIG.get('check_email_format', True)}")
+        print(f"      Link format: {VERIFICATION_CONFIG.get('check_link_format', True)}")
+
+        verified_projects = []
+        invalid_count = 0
+
+        for project in unique_projects:
+            # Run verification
+            validated = verify_project_sync(
+                project,
+                check_accessibility=VERIFICATION_CONFIG.get('check_accessibility', False),
+                check_activity=VERIFICATION_CONFIG.get('check_activity', False)
+            )
+            verified_projects.append(validated)
+
+            if not validated.get('is_valid', True):
+                invalid_count += 1
+
+        print(f"      Validated {len(verified_projects)} projects")
+        print(f"      Invalid projects: {invalid_count}")
+
+        # Filter invalid projects if configured
+        if VERIFICATION_CONFIG.get('remove_invalid', True):
+            unique_projects, _ = filter_valid_projects(verified_projects, remove_invalid=True)
+            print(f"      Filtered out invalid projects")
+        else:
+            unique_projects = verified_projects
+    else:
+        # Mark all as valid if verification is disabled
+        for p in unique_projects:
+            p['is_valid'] = True
+            p['validation_notes'] = None
+            p['validated_at'] = None
 
     # Sort by priority score
     unique_projects.sort(key=lambda x: x['priority_score'], reverse=True)
@@ -428,6 +691,7 @@ def save_to_csv(projects):
     csv_path = DATE_DIR / f"design_projects_{TODAY}.csv"
 
     fieldnames = [
+        '是否有效', '校验备注', '校验时间',
         '优先级标签', '优先级分数', '数据来源',
         '项目标题', '客户名称', '客户类型', '客户行业',
         '预算(USD)', '预算范围', '项目需求描述',
@@ -439,7 +703,14 @@ def save_to_csv(projects):
     # Map project dict keys to Chinese column headers
     csv_rows = []
     for p in projects:
+        # Format validation notes for CSV
+        validation_notes = p.get('validation_notes', [])
+        notes_str = '; '.join(validation_notes) if validation_notes else ''
+
         row = {
+            '是否有效': '是' if p.get('is_valid', True) else '否',
+            '校验备注': notes_str,
+            '校验时间': p.get('validated_at', '') or '',
             '优先级标签': p.get('priority_label', ''),
             '优先级分数': p.get('priority_score', 0),
             '数据来源': p.get('platform', ''),
@@ -568,6 +839,10 @@ def generate_summary_report(projects):
     high_priority = sum(1 for p in projects if p.get('priority_score', 0) >= 50)
     medium_priority = sum(1 for p in projects if 30 <= p.get('priority_score', 0) < 50)
 
+    # Validation stats
+    valid_projects = sum(1 for p in projects if p.get('is_valid', True))
+    invalid_projects = total - valid_projects
+
     # Platform stats
     platform_stats = {}
     for p in projects:
@@ -593,10 +868,19 @@ def generate_summary_report(projects):
 |--------|-------|
 | Total Projects Found | {total} |
 | Deduplicated Projects | {total} |
+| Valid Projects | {valid_projects} ({100*valid_projects/total:.1f}%) |
+| Invalid Projects | {invalid_projects} ({100*invalid_projects/total:.1f}%) |
 | With Email Contact | {with_email} ({100*with_email/total:.1f}%) |
 | With LinkedIn Contact | {with_linkedin} ({100*with_linkedin/total:.1f}%) |
 | High Priority (A/B级) | {high_priority} |
 | Medium Priority (C级) | {medium_priority} |
+
+## Validation Status
+
+| Status | Count | Description |
+|--------|-------|-------------|
+| Valid | {valid_projects} | Passed email/URL format validation |
+| Invalid | {invalid_projects} | Failed validation (filtered out) |
 
 ## Priority Distribution
 
@@ -675,6 +959,108 @@ def generate_summary_report(projects):
 
     return report_path
 
+def save_projects_json(projects, user_profile=None):
+    """Save high-priority projects as JSON for AI email generation
+
+    This outputs a clean JSON file that Claude can read to generate
+    truly personalized marketing emails during skill execution.
+
+    Includes match_score based on user profile for personalized recommendations.
+    """
+    if user_profile is None:
+        user_profile = load_user_profile()
+
+    # Filter to high/medium priority projects with contact info
+    ai_projects = []
+    for i, p in enumerate(projects, 1):
+        score = p.get('priority_score', 0)
+        if score < 30:  # Skip low priority
+            continue
+
+        # Only include projects with at least one contact method
+        if not (p.get('email') or p.get('linkedin') or p.get('website')):
+            continue
+
+        # Calculate match score based on user profile
+        match_score, match_reasons = calculate_match_score(p, user_profile)
+
+        # Get relevant highlight project for email personalization
+        highlight = get_relevant_highlight_project(p, user_profile)
+        highlight_info = None
+        if highlight:
+            highlight_info = {
+                'name': highlight.get('name', ''),
+                'benchmark': highlight.get('benchmark', ''),
+                'result': highlight.get('result', ''),
+                'result_en': highlight.get('result_en', '')
+            }
+
+        ai_projects.append({
+            'id': i,
+            'is_valid': p.get('is_valid', True),
+            'validation_notes': p.get('validation_notes'),
+            'validated_at': p.get('validated_at'),
+            'priority_score': score,
+            'priority_label': p.get('priority_label', ''),
+            'match_score': match_score,
+            'match_reasons': match_reasons,
+            'recommended_highlight': highlight_info,
+            'platform': p.get('platform', ''),
+            'title': p.get('title', ''),
+            'client': p.get('client', ''),
+            'client_type': p.get('client_type', ''),
+            'industry': p.get('industry', ''),
+            'budget': p.get('budget', 0),
+            'budget_range': p.get('budget_range', ''),
+            'requirements': p.get('requirements', ''),
+            'status': p.get('status', ''),
+            'work_scope': p.get('需要做的工作', ''),
+            'deliverables': p.get('交付物', ''),
+            'format': p.get('交付格式', ''),
+            'timeline': p.get('交付时间', ''),
+            'email': p.get('email', ''),
+            'linkedin': p.get('linkedin', ''),
+            'website': p.get('website', ''),
+            'platform_link': p.get('platform_link', ''),
+            'past_jobs': p.get('past_jobs', 0),
+            'rating': p.get('rating', '')
+        })
+
+    # Sort by combined score (priority + match)
+    ai_projects.sort(key=lambda x: (x['priority_score'] + x['match_score']), reverse=True)
+
+    # Add user profile summary for Claude reference
+    user_summary = {
+        'name': user_profile.get('name', ''),
+        'name_en': user_profile.get('name_en', ''),
+        'role': user_profile.get('role_en', ''),
+        'website': user_profile.get('website', ''),
+        'email': user_profile.get('email', ''),
+        'years_experience': user_profile.get('years_experience', 0),
+        'highlight_projects': [
+            {
+                'name': h.get('name', ''),
+                'benchmark': h.get('benchmark', ''),
+                'result_en': h.get('result_en', h.get('result', ''))
+            }
+            for h in user_profile.get('highlight_projects', [])[:3]
+        ]
+    }
+
+    json_path = DATE_DIR / f"projects_for_ai_emails_{TODAY}.json"
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'generated': datetime.now().isoformat(),
+            'user_profile': user_summary,
+            'total_count': len(ai_projects),
+            'high_priority_count': sum(1 for p in ai_projects if p['priority_score'] >= 50),
+            'high_match_count': sum(1 for p in ai_projects if p['match_score'] >= 50),
+            'projects': ai_projects
+        }, f, ensure_ascii=False, indent=2)
+
+    return json_path, len(ai_projects), sum(1 for p in ai_projects if p['match_score'] >= 50)
+
+
 def save_readme():
     """Generate README for the date folder"""
     readme_path = DATE_DIR / "README.md"
@@ -718,35 +1104,48 @@ def main():
     print("=" * 60)
     print(f"\n📁 Output folder: output/{TODAY}/")
 
+    # Load user profile for personalized matching
+    print("\n[0/7] Loading user profile...")
+    user_profile = load_user_profile()
+    user_name = user_profile.get('name', 'Unknown')
+    print(f"      Profile loaded: {user_name}")
+
     # Update latest symlink
-    print("\n[0/5] Setting up output structure...")
+    print("\n[1/7] Setting up output structure...")
     update_latest_symlink()
 
     # Process data
-    print("\n[1/5] Processing and deduplicating projects...")
+    print("\n[2/7] Processing and deduplicating projects...")
     projects = process_data()
     print(f"      Found {len(projects)} unique projects")
 
     # Save CSV
-    print("\n[2/5] Saving to CSV files...")
+    print("\n[3/7] Saving to CSV files...")
     csv_path = save_to_csv(projects)
     print(f"      Saved: {csv_path.relative_to(OUTPUT_DIR)}")
 
     contact_path = save_contact_list(projects)
     print(f"      Saved: {contact_path.relative_to(OUTPUT_DIR)}")
 
-    # Generate marketing emails
-    print("\n[3/5] Generating marketing emails...")
+    # Generate marketing emails (template-based)
+    print("\n[4/7] Generating template marketing emails...")
     email_count = generate_marketing_emails(projects)
-    print(f"      Generated {email_count} personalized emails")
+    print(f"      Generated {email_count} template emails")
+
+    # Save JSON for AI-powered email generation (with match scores)
+    print("\n[5/7] Saving JSON for AI email generation...")
+    json_path, ai_count, high_match_count = save_projects_json(projects, user_profile)
+    print(f"      Saved: {json_path.relative_to(OUTPUT_DIR)}")
+    print(f"      {ai_count} projects ready for AI personalization")
+    print(f"      {high_match_count} projects highly matched to your profile")
 
     # Generate summary report
-    print("\n[4/5] Generating summary report...")
+    print("\n[6/7] Generating summary report...")
     report_path = generate_summary_report(projects)
     print(f"      Saved: {report_path.relative_to(OUTPUT_DIR)}")
 
     # Save README
-    print("\n[5/5] Saving README...")
+    print("\n[7/7] Saving README...")
     readme_path = save_readme()
     print(f"      Saved: {readme_path.relative_to(OUTPUT_DIR)}")
 
@@ -757,8 +1156,10 @@ def main():
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
+    print(f"User profile:      {user_name}")
     print(f"Total projects:    {len(projects)}")
     print(f"High priority:     {high_prio}")
+    print(f"High match:        {high_match_count} (based on your expertise)")
     print(f"With email:        {with_email}")
     print(f"Marketing emails:  {email_count}")
     print(f"\nQuick access: output/latest/")

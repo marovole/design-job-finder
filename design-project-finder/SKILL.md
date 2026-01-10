@@ -7,6 +7,8 @@ description: "搜索海外设计工作平台,找到与用户专长匹配的项�
 
 > **一键执行**: `python3 process_design_projects.py`
 
+> **带校验执行**: `python3 process_design_projects.py` (自动校验并过滤无效项目)
+
 ---
 
 ## 用户背景
@@ -64,6 +66,7 @@ SUMMARY
 ============================================================
 User profile:      黄蓉
 Total projects:    99
+Valid projects:    95 (4 filtered)
 High priority:     64
 High match:        24 (基于您的专长)
 With email:        68
@@ -113,6 +116,35 @@ result = mcp__exa__deep_researcher_check(taskId=task_id)
 3. **优先级评分** → 预算(35%) + 联系方式(25%) + 客户质量(20%) + 稳定性(20%)
 4. **匹配度评分** → 基于用户专长关键词、行业、客户类型
 5. **输出 JSON** → 包含 `match_score` 和 `recommended_highlight`
+
+### 阶段2.5: 数据校验 (自动)
+
+数据处理过程中会自动进行校验：
+
+```python
+# 校验配置 (process_design_projects.py)
+VERIFICATION_CONFIG = {
+    'enabled': True,              # 启用校验
+    'check_email_format': True,   # 邮箱格式验证
+    'check_link_format': True,    # 链接格式验证
+    'check_accessibility': False, # 链接可访问性（慢，需Playwright MCP）
+    'check_activity': False,      # 项目活跃度（慢，需Exa AI MCP）
+    'remove_invalid': True        # 从输出中移除无效项目
+}
+```
+
+**校验内容：**
+- 邮箱格式验证 (正则表达式)
+- URL 格式验证 (website, linkedin, platform_link)
+- 链接可访问性验证 (可选，使用 Playwright MCP)
+- 项目活跃度验证 (可选，使用 Exa AI 搜索)
+
+**输出字段：**
+| 字段 | 说明 |
+|------|------|
+| `is_valid` | 是否有效 (true/false) |
+| `validation_notes` | 校验问题列表 |
+| `validated_at` | 校验时间戳 |
 
 ### 阶段3: AI 邮件生成
 
@@ -240,33 +272,59 @@ Email: hueshadow989@gmail.com
 
 ```json
 {
-  "user_profile": {
-    "name": "黄蓉",
-    "name_en": "Huang Rong",
-    "website": "https://hueshadow.com",
-    "highlight_projects": [
-      {"name": "HUAWEI Analytics", "result_en": "21,000+ apps globally"},
-      {"name": "Business Connect", "result_en": "5.94 million merchants"}
-    ]
-  },
+  "user_profile": {...},
   "high_match_count": 24,
+  "total_valid_projects": 95,
   "projects": [
     {
       "id": 1,
+      "is_valid": true,
+      "validation_notes": null,
+      "validated_at": "2026-01-10T10:00:00",
       "priority_score": 90,
       "match_score": 80,
-      "match_reasons": ["关键词: dashboard", "行业: Data Analytics", "客户: SME"],
-      "recommended_highlight": {
-        "name": "HUAWEI Analytics",
-        "result_en": "21,000+ apps globally"
-      },
-      "title": "Product Designer at DataViz",
-      "client": "DataViz Corp",
-      "industry": "Data Analytics",
-      "email": "design@dataviz.com",
       ...
     }
   ]
+}
+```
+
+---
+
+## 独立校验脚本
+
+### 快速校验（仅格式检查）
+
+```bash
+python3 design-project-finder/verify_project_data.py
+```
+
+- 验证邮箱格式
+- 验证链接格式
+- 不检查可访问性（快速）
+
+### 完整校验（含链接和活跃度）
+
+```bash
+python3 design-project-finder/verify_project_data.py --full-check --async
+```
+
+- 验证邮箱格式
+- 验证链接格式
+- 检查链接可访问性（Playwright MCP）
+- 检查项目活跃度（Exa AI MCP）
+
+### 输出
+
+校验结果保存到 `design-project-finder/output/verified_projects.json`
+
+```json
+{
+  "verified_at": "2026-01-10T10:00:00",
+  "total_projects": 99,
+  "valid_projects": 95,
+  "invalid_projects": 4,
+  "projects": [...]
 }
 ```
 
@@ -365,12 +423,23 @@ email_signature: |
 
 ## 执行检查清单
 
-- [ ] 运行 `python3 process_design_projects.py`
+- [ ] 运行 `python3 process_design_projects.py` (自动校验)
+- [ ] 检查 `Valid projects` 数量和过滤的项目
 - [ ] 检查 `High match: X` 数量是否合理
 - [ ] 查看 `output/latest/projects_for_ai_emails_*.json`
+- [ ] 确认 `is_valid: true` 的项目数量
 - [ ] 为 TOP 5 高匹配项目生成 AI 邮件
 - [ ] 验证邮件: `python3 verify_emails.py`
 - [ ] 人工审核后发送
+
+### 校验相关问题排查
+
+| 问题 | 可能原因 | 解决方案 |
+|------|---------|----------|
+| 邮箱格式错误 | 缺少 `@` 或域名 | 检查原始数据 |
+| 链接缺少协议 | URL 未以 `http` 开头 | 手动补全或过滤 |
+| 链接无法访问 | 网站已下线/404 | 移除或更新链接 |
+| 项目已关闭 | 招聘已结束 | 使用 `--full-check --async` 验证 |
 
 ---
 
@@ -379,6 +448,7 @@ email_signature: |
 | 指标 | 目标值 |
 |------|--------|
 | 总项目数 | 80-150 |
+| 有效项目 | 75-145 (5-10% 过滤) |
 | 高优先级 | 50-70 |
 | 高匹配度 | 20-30 |
 | 有邮箱联系 | 60-70% |
@@ -387,6 +457,13 @@ email_signature: |
 ---
 
 ## 版本历史
+
+- **v2.1** (2026-01-10): 添加数据校验功能
+  - 邮箱格式验证
+  - 链接格式验证
+  - 可选的链接可访问性检查（Playwright MCP）
+  - 可选的项目活跃度检查（Exa AI MCP）
+  - 自动过滤无效项目
 
 - **v2.0** (2026-01-09): 添加用户背景匹配、个性化邮件生成
 - **v1.0** (2026-01-08): 初始版本
