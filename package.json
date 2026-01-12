@@ -1,0 +1,27 @@
+{
+  "name": "pm-job-finder-convex",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@auth/core": "^0.34.0",
+    "@convex-dev/auth": "^0.0.68",
+    "auth": "^1.0.0",
+    "next": "14.2.0",
+    "openai": "^4.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "convex": "^1.31.3",
+    "typescript": "^5.0.0"
+  }
+}
