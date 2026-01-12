@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useState } from "react";
-import { useAuth } from "@convex-dev/auth/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function Home() {
-  const { signIn, signOut, isAuthenticated } = useAuth();
+  const { signIn, signOut } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
   const profile = useQuery(api.functions.profile.getProfile);
   const projects = useQuery(api.functions.projects.getProjects, { limit: 10 });
   const stats = useQuery(api.functions.projects.getProjectStats);
