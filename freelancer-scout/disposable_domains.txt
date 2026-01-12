@@ -1,0 +1,174 @@
+# Disposable Email Domains List
+# 一次性邮箱域名黑名单
+# Format: one domain per line, lines starting with # are comments
+
+# ============================================
+# Common Disposable Email Services
+# ============================================
+
+# 10 Minute Mail family
+10minutemail.com
+10minutemail.net
+10minutemail.org
+10minutemail.co.uk
+10minutemail.de
+10minmail.com
+10mail.org
+10mail.tk
+
+# Guerrilla Mail
+guerrillamail.com
+guerrillamail.org
+guerrillamail.net
+guerrillamail.biz
+guerrillamail.de
+guerrillamailblock.com
+grr.la
+sharklasers.com
+guerrillamail.info
+
+# Mailinator
+mailinator.com
+mailinator.net
+mailinator.org
+mailinator.us
+mailinator2.com
+mailinater.com
+
+# Temp Mail
+tempmail.com
+temp-mail.org
+temp-mail.ru
+temp-mail.io
+tempmail.net
+tempmail.it
+tempail.com
+tempmailaddress.com
+tempmailo.com
+
+# Trash Mail
+trashmail.com
+trashmail.net
+trashmail.org
+trashmail.me
+trashmail.ws
+trashemail.de
+trash-mail.com
+trash-mail.de
+trash-mail.at
+
+# Yopmail
+yopmail.com
+yopmail.fr
+yopmail.net
+yopmail.gq
+yop.email
+yopmail.pp.ua
+
+# Other popular services
+getnada.com
+mohmal.com
+emailondeck.com
+dispostable.com
+mailnesia.com
+mintemail.com
+fakeinbox.com
+maildrop.cc
+spamgourmet.com
+throwaway.email
+throwawaymail.com
+burnermail.io
+discard.email
+mailsac.com
+inboxalias.com
+jetable.org
+mytrashmail.com
+fakemailgenerator.com
+temporary-mail.net
+emailfake.com
+crazymailing.com
+tempr.email
+fakemail.net
+dropmail.me
+harakirimail.com
+mailcatch.com
+
+# ============================================
+# Short-lived / Temporary domains
+# ============================================
+mt2015.com
+nwytg.net
+tmail.ws
+tmails.net
+tmpmail.net
+tmpmail.org
+tempsky.com
+mailtemp.net
+mailfree.ga
+mailpoof.com
+spambox.info
+spamfree24.com
+spamfree24.de
+spamfree24.eu
+spamfree24.info
+spamfree24.net
+spamfree24.org
+spamherelots.com
+spamhereplease.com
+spamhole.com
+spaml.com
+spaml.de
+
+# ============================================
+# Anonymous / Privacy focused (often abused)
+# ============================================
+anonymbox.com
+anonbox.net
+anonymousemail.me
+anonymmail.net
+anonymousspeech.com
+anonymouse.org
+
+# ============================================
+# Regional disposable services
+# ============================================
+# Russian
+mailforspam.com
+spamwc.de
+wegwerfmail.de
+wegwerfmail.net
+wegwerfmail.org
+sofort-mail.de
+spoofmail.de
+trashbox.eu
+trashdevil.com
+trashdevil.de
+
+# Chinese (less common but exists)
+bk.ru
+list.ru
+
+# ============================================
+# Recently identified disposable domains
+# ============================================
+emailsensei.com
+spamex.com
+mailnull.com
+mailshell.com
+mailexpire.com
+messagebeamer.de
+smellfear.com
+h8s.org
+dodgit.com
+dodgeit.com
+proxymail.eu
+rcpt.at
+spamtrail.com
+curryworld.de
+keepmymail.com
+objectmail.com
+spamcon.org
+getonemail.com
+sogetthis.com
+kasmail.com
+onewaymail.com
