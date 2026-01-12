@@ -42,10 +42,7 @@ export default function Home() {
           Find overseas PM and design jobs with AI-powered matching
         </p>
         <div className="flex" style={{ justifyContent: "center" }}>
-          <button className="btn btn-primary" onClick={() => signIn("github")}>
-            Sign in with GitHub
-          </button>
-          <button className="btn btn-secondary" onClick={() => signIn("google")}>
+          <button className="btn btn-primary" onClick={() => signIn("google")}>
             Sign in with Google
           </button>
         </div>
