@@ -147,6 +147,190 @@ export const deleteEmail = mutationGeneric({
   },
 });
 
+// 使用 OpenRouter 免费 AI 生成邮件
+export const generateEmailWithAI = mutationGeneric({
+  args: {
+    projectId: v.id("projects"),
+  },
+  async handler(ctx, args) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const [project, profile] = await Promise.all([
+      ctx.db.get(args.projectId),
+      ctx.db
+        .query("userProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+        .first(),
+    ]);
+
+    if (!project) throw new Error("Project not found");
+    if (!profile) throw new Error("Profile not found");
+
+    const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+    if (!openrouterApiKey) {
+      throw new Error("OPENROUTER_API_KEY not configured");
+    }
+
+    // 构建 AI prompt
+    const systemPrompt = `You are an expert email copywriter specializing in job application emails.
+Write professional, personalized, and compelling emails that highlight the candidate's relevant experience.
+Keep the tone confident but not arrogant. Be specific about how the candidate's experience matches the job requirements.
+Write in English. Keep the email concise (under 200 words).`;
+
+    const userPrompt = `Generate a personalized job application email based on:
+
+**Job/Project:**
+- Title: ${project.title}
+- Description: ${project.description?.substring(0, 500) || "N/A"}
+- Platform: ${project.platform}
+- Client Industry: ${project.clientIndustry || "Not specified"}
+
+**Candidate Profile:**
+- Name: ${profile.nameEn} (${profile.name})
+- Role: ${profile.roleEn}
+- Years of Experience: ${profile.yearsExperience}
+- Core Expertise: ${profile.coreExpertise.join(", ")}
+- Highlight Projects: ${profile.highlightProjects.map((p: any) => `${p.name}: ${p.result}`).join("; ")}
+
+Generate:
+1. 3 compelling subject lines (each on a new line, prefixed with "Subject: ")
+2. A personalized email body that:
+   - Opens with a hook related to the job
+   - Highlights relevant experience with specific achievements
+   - Includes a clear call-to-action
+   - Ends with a professional signature
+
+Format the output as:
+SUBJECTS:
+Subject: [subject 1]
+Subject: [subject 2]
+Subject: [subject 3]
+
+EMAIL:
+[full email body]`;
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${openrouterApiKey}`,
+          "HTTP-Referer": "https://pm-job-finder.vercel.app",
+          "X-Title": "PM Job Finder",
+        },
+        body: JSON.stringify({
+          model: "mistralai/devstral-2512:free",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: 1000,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      const aiContent = data.choices?.[0]?.message?.content || "";
+
+      // 解析 AI 响应
+      const { subjects, emailBody } = parseAIResponse(aiContent, project, profile);
+
+      // 分析推销角度
+      const analysis = analyzeProjectRequirements(project, profile);
+      const achievementMatch = findBestAchievement(profile.highlightProjects, project);
+
+      // 保存邮件
+      const emailId = await ctx.db.insert("generatedEmails", {
+        userId: identity.subject,
+        projectId: args.projectId,
+        pitchAngle: analysis.pitchAngle,
+        matchedAchievement: achievementMatch.achievement?.name,
+        relevanceScore: analysis.score,
+        subjectLines: subjects,
+        opening: emailBody.split("\n\n")[0] || "",
+        valueProposition: emailBody.split("\n\n")[1] || "",
+        socialProof: "",
+        callToAction: emailBody.split("\n\n").slice(-2, -1)[0] || "",
+        signature: profile.emailTemplates?.signature || `${profile.nameEn} (${profile.name})`,
+        fullEmail: `Subject: ${subjects[0]}\n\n${emailBody}`,
+        status: "draft",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      // 更新项目状态
+      await ctx.db.patch(args.projectId, {
+        hasEmailGenerated: true,
+        emailGeneratedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      return emailId;
+    } catch (error: any) {
+      console.error("AI email generation failed:", error);
+      throw new Error(`Failed to generate AI email: ${error.message}`);
+    }
+  },
+});
+
+// 解析 AI 响应
+function parseAIResponse(
+  content: string,
+  project: any,
+  profile: any
+): { subjects: string[]; emailBody: string } {
+  const subjects: string[] = [];
+  let emailBody = "";
+
+  // 提取主题行
+  const subjectMatches = content.match(/Subject:\s*(.+)/g);
+  if (subjectMatches) {
+    subjectMatches.forEach((match) => {
+      const subject = match.replace(/Subject:\s*/, "").trim();
+      if (subject && subjects.length < 3) {
+        subjects.push(subject);
+      }
+    });
+  }
+
+  // 提取邮件正文
+  const emailMatch = content.match(/EMAIL:\s*([\s\S]*)/i);
+  if (emailMatch) {
+    emailBody = emailMatch[1].trim();
+  } else {
+    // 如果没有 EMAIL: 标记，尝试提取最后一个 Subject 后的内容
+    const lastSubjectIndex = content.lastIndexOf("Subject:");
+    if (lastSubjectIndex !== -1) {
+      const afterSubjects = content.substring(lastSubjectIndex);
+      const newlineIndex = afterSubjects.indexOf("\n");
+      if (newlineIndex !== -1) {
+        emailBody = afterSubjects.substring(newlineIndex).trim();
+      }
+    }
+  }
+
+  // 如果仍然没有解析到内容，使用回退方案
+  if (subjects.length === 0) {
+    subjects.push(
+      `${profile.roleEn} interested in: ${project.title}`,
+      `Experience with ${project.clientIndustry || "your industry"} - ${project.title}`,
+      `${profile.nameEn}'s application for ${project.title}`
+    );
+  }
+
+  if (!emailBody) {
+    emailBody = content;
+  }
+
+  return { subjects, emailBody };
+}
+
 // 分析项目需求
 function analyzeProjectRequirements(
   project: any,

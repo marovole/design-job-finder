@@ -1,20 +1,24 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useState } from "react";
-import { useAuth } from "@convex-dev/auth/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function Home() {
-  const { signIn, signOut, isAuthenticated } = useAuth();
+  const { signIn, signOut } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
   const profile = useQuery(api.functions.profile.getProfile);
   const projects = useQuery(api.functions.projects.getProjects, { limit: 10 });
   const stats = useQuery(api.functions.projects.getProjectStats);
   const searchProjects = useMutation(api.functions.search.searchProjects);
   const generateEmail = useMutation(api.functions.emails.generateEmail);
+  const generateEmailWithAI = useMutation(api.functions.emails.generateEmailWithAI);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -143,7 +147,22 @@ export default function Home() {
                     className="btn btn-secondary text-sm"
                     onClick={() => generateEmail({ projectId: project._id })}
                   >
-                    Generate Email
+                    Template Email
+                  </button>
+                  <button
+                    className="btn btn-primary text-sm"
+                    onClick={async () => {
+                      setGeneratingAI(project._id);
+                      try {
+                        await generateEmailWithAI({ projectId: project._id });
+                      } catch (e) {
+                        console.error("AI generation failed:", e);
+                      }
+                      setGeneratingAI(null);
+                    }}
+                    disabled={generatingAI === project._id}
+                  >
+                    {generatingAI === project._id ? "Generating..." : "AI Email"}
                   </button>
                   {project.projectUrl && (
                     <a
