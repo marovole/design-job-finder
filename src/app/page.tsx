@@ -12,9 +12,11 @@ export default function Home() {
   const stats = useQuery(api.functions.projects.getProjectStats);
   const searchProjects = useMutation(api.functions.search.searchProjects);
   const generateEmail = useMutation(api.functions.emails.generateEmail);
+  const generateEmailWithAI = useMutation(api.functions.emails.generateEmailWithAI);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -143,7 +145,22 @@ export default function Home() {
                     className="btn btn-secondary text-sm"
                     onClick={() => generateEmail({ projectId: project._id })}
                   >
-                    Generate Email
+                    Template Email
+                  </button>
+                  <button
+                    className="btn btn-primary text-sm"
+                    onClick={async () => {
+                      setGeneratingAI(project._id);
+                      try {
+                        await generateEmailWithAI({ projectId: project._id });
+                      } catch (e) {
+                        console.error("AI generation failed:", e);
+                      }
+                      setGeneratingAI(null);
+                    }}
+                    disabled={generatingAI === project._id}
+                  >
+                    {generatingAI === project._id ? "Generating..." : "AI Email"}
                   </button>
                   {project.projectUrl && (
                     <a
